@@ -1,0 +1,467 @@
+<title>מעקב דירות להשכרה</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;700&family=Rubik:wght@500;700&display=swap" rel="stylesheet">
+<style>
+/* Layout: summary strip of status counts, filter bar, then a grid of apartment cards; editing in a modal. */
+:root {
+  --bg: #f4f6f5; --surface: #ffffff; --surface-2: #eef1ef; --border: #d9dfdc;
+  --text: #17201c; --muted: #5f6b66; --accent: #1f6f5c; --accent-ink: #ffffff;
+  --star: #e3a008; --star-off: #d4dad7; --danger: #c23b3b;
+  --s-not: #87918d; --s-wait: #c9800a; --s-ans: #2f6fde; --s-sched: #7a4fd6; --s-vis: #1f9d63; --s-irr: #b3bbb7;
+  --display: "Rubik", "Heebo", system-ui, sans-serif;
+  --body: "Heebo", system-ui, sans-serif;
+  --shadow: 0 1px 2px rgba(20,40,30,.06), 0 2px 6px rgba(20,40,30,.05);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #111614; --surface: #19201d; --surface-2: #222b27; --border: #2e3934;
+    --text: #e4ebe7; --muted: #95a39c; --accent: #4fbf9f; --accent-ink: #0d1412;
+    --star-off: #3a4540; --s-irr: #56625c; --shadow: none; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #111614; --surface: #19201d; --surface-2: #222b27; --border: #2e3934;
+  --text: #e4ebe7; --muted: #95a39c; --accent: #4fbf9f; --accent-ink: #0d1412;
+  --star-off: #3a4540; --s-irr: #56625c; --shadow: none; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--text); font-family: var(--body); font-size: 15px; direction: rtl; }
+.wrap { max-width: 1200px; margin: 0 auto; padding-inline: 16px; padding-block: 20px 48px; display: flex; flex-direction: column; gap: 16px; }
+header { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+h1 { font-family: var(--display); font-size: 24px; margin: 0; flex: 1; text-wrap: balance; }
+.sub { color: var(--muted); font-size: 13px; }
+button, select, input, textarea { font: inherit; color: inherit; }
+.btn { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 7px 14px; cursor: pointer; }
+.btn:hover { background: var(--surface-2); }
+.btn:focus-visible, .kpi:focus-visible, select:focus-visible, input:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 500; }
+.btn.danger { color: var(--danger); }
+.btn[disabled] { opacity: .5; cursor: default; }
+.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(128px, 1fr)); gap: 8px; }
+.kpi { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; cursor: pointer; text-align: right; }
+.kpi[aria-pressed="true"] { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.kpi .v { font-family: var(--display); font-size: 24px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.kpi .l { color: var(--muted); font-size: 13px; display: flex; align-items: center; gap: 6px; }
+.toolbar { display: flex; gap: 8px; flex-wrap: wrap; }
+.toolbar input, .toolbar select { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 7px 10px; }
+.toolbar input { flex: 1; min-width: 0; flex-basis: 200px; }
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(330px, 100%), 1fr)); gap: 14px; }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; box-shadow: var(--shadow); display: flex; flex-direction: column; min-width: 0; }
+.card.irrelevant { opacity: .55; }
+.thumb { height: 150px; background: var(--surface-2); display: flex; align-items: center; justify-content: center; color: var(--muted); font-size: 13px; position: relative; border: 0; padding: 0; width: 100%; }
+.thumb.has { cursor: zoom-in; }
+.thumb img { width: 100%; height: 100%; object-fit: cover; object-position: top; }
+.score { position: absolute; top: 10px; left: 10px; background: var(--surface); color: var(--text); border: 1px solid var(--border); border-radius: 20px; padding: 2px 10px; font-family: var(--display); font-weight: 700; font-size: 14px; font-variant-numeric: tabular-nums; }
+.score span { color: var(--star); }
+.example { position: absolute; top: 10px; right: 10px; background: var(--s-wait); color: #fff; border-radius: 20px; padding: 2px 10px; font-size: 12px; }
+.body { padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; flex: 1; }
+.title { font-family: var(--display); font-weight: 500; font-size: 17px; }
+.facts { display: flex; gap: 12px; flex-wrap: wrap; font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.facts b { color: var(--text); font-size: 15px; }
+.desc { font-size: 14px; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 14px; }
+.lbl { color: var(--muted); font-size: 13px; }
+.pill { display: inline-flex; align-items: center; border-radius: 20px; padding: 2px 10px; font-size: 13px; background: var(--surface-2); }
+.dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; flex: none; }
+.status-select { border: 1px solid var(--border); border-radius: 20px; padding: 3px 8px; background: var(--surface-2); font-size: 13px; }
+.phone { font-variant-numeric: tabular-nums; user-select: all; direction: ltr; unicode-bidi: isolate; }
+.dates { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; background: var(--surface-2); border-radius: 8px; padding: 8px 10px; font-size: 14px; }
+.dates b { display: block; font-variant-numeric: tabular-nums; }
+.ratings { display: grid; grid-template-columns: 1fr 1fr; gap: 3px 14px; font-size: 13px; }
+.ratings > div { display: flex; justify-content: space-between; align-items: center; gap: 6px; }
+.stars { color: var(--star); white-space: nowrap; display: inline-flex; }
+.stars button { all: unset; cursor: pointer; padding: 0 1px; font-size: 15px; line-height: 1; }
+.stars button:focus-visible { outline: 2px solid var(--accent); border-radius: 3px; }
+.stars .off { color: var(--star-off); }
+.stars.ro button { cursor: default; }
+.notes { font-size: 13px; color: var(--muted); border-top: 1px dashed var(--border); padding-top: 6px; }
+.foot { display: flex; gap: 6px; padding: 10px 14px; border-top: 1px solid var(--border); flex-wrap: wrap; }
+.foot a, .foot button { font-size: 13px; text-decoration: none; color: var(--accent); background: none; border: 1px solid var(--border); border-radius: 6px; padding: 4px 10px; cursor: pointer; }
+.empty { text-align: center; padding: 56px 16px; color: var(--muted); background: var(--surface); border: 1px dashed var(--border); border-radius: 12px; grid-column: 1 / -1; }
+.empty b { color: var(--text); display: block; font-family: var(--display); font-size: 18px; margin-bottom: 6px; }
+.banner { background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; font-size: 13px; color: var(--muted); }
+dialog { border: none; border-radius: 14px; padding: 0; background: var(--surface); color: var(--text); width: min(680px, calc(100vw - 32px)); max-height: calc(100vh - 32px); direction: rtl; }
+dialog::backdrop { background: rgba(0,0,0,.5); }
+.dlg-head { padding: 14px 18px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; font-family: var(--display); font-weight: 500; }
+.dlg-body { padding: 16px 18px; display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.dlg-body label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--muted); min-width: 0; }
+.dlg-body .full { grid-column: 1 / -1; }
+.dlg-body input, .dlg-body select, .dlg-body textarea { background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px; padding: 7px 10px; color: var(--text); font-size: 15px; width: 100%; }
+.dlg-body textarea { min-height: 70px; resize: vertical; }
+.dlg-body .stars button { font-size: 22px; }
+.shot-edit { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.shot-edit img { height: 70px; border-radius: 6px; border: 1px solid var(--border); }
+.dlg-foot { padding: 12px 18px; border-top: 1px solid var(--border); display: flex; gap: 8px; flex-wrap: wrap; }
+.dlg-foot .spacer { flex: 1; }
+#lightbox { background: transparent; width: auto; max-width: 95vw; }
+#lightbox img { max-width: 95vw; max-height: 90vh; display: block; border-radius: 8px; }
+.weights { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 18px; padding: 16px 18px; }
+.weights label { display: grid; grid-template-columns: 1fr 2fr auto; align-items: center; gap: 8px; font-size: 14px; }
+.weights b { font-variant-numeric: tabular-nums; min-width: 2ch; }
+@media (max-width: 560px) { .dlg-body, .weights { grid-template-columns: 1fr; } }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<div class="wrap">
+  <header>
+    <div style="flex:1;min-width:0">
+      <h1>מעקב דירות להשכרה</h1>
+      <div class="sub" id="syncNote">טוען נתונים…</div>
+    </div>
+    <button class="btn" id="btnWeights" type="button">משקלות דירוג</button>
+    <button class="btn primary" id="btnAdd" type="button">+ דירה חדשה</button>
+  </header>
+  <div class="banner" id="banner" hidden></div>
+  <section class="kpis" id="kpis" aria-label="סיכום לפי סטטוס"></section>
+  <section class="toolbar">
+    <input id="q" type="search" placeholder="חיפוש לפי מיקום, איש קשר, תיאור…" aria-label="חיפוש">
+    <select id="sort" aria-label="מיון">
+      <option value="score">מיון: ציון כולל</option>
+      <option value="price">מיון: מחיר (נמוך לגבוה)</option>
+      <option value="entry">מיון: תאריך כניסה</option>
+      <option value="visit">מיון: תאריך ביקור</option>
+      <option value="added">מיון: נוספו לאחרונה</option>
+    </select>
+    <select id="hideIrr" aria-label="דירות לא רלוונטיות">
+      <option value="hide">הסתר לא רלוונטיות</option>
+      <option value="show">הצג הכל</option>
+    </select>
+  </section>
+  <section class="grid" id="grid">
+    <div class="empty"><b>הרשימה נטענת</b>הדירות שנשלחו ל-Claude יופיעו כאן.</div>
+  </section>
+</div>
+
+<dialog id="editDlg">
+  <form id="editForm">
+    <div class="dlg-head"><span id="editTitle">דירה</span><button class="btn" type="button" data-close>✕</button></div>
+    <div class="dlg-body" id="editBody"></div>
+    <div class="dlg-foot">
+      <button class="btn primary" type="submit" id="btnSave">שמירה</button>
+      <button class="btn" type="button" data-close>ביטול</button>
+      <span class="spacer"></span>
+      <button class="btn danger" type="button" id="btnDelete">מחיקה</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="weightsDlg">
+  <div class="dlg-head"><span>כמה כל פרמטר משפיע על הציון הכולל</span><button class="btn" type="button" data-close>✕</button></div>
+  <div class="weights" id="weightsBody"></div>
+  <div class="dlg-foot"><button class="btn primary" type="button" data-close>סגירה</button></div>
+</dialog>
+
+<dialog id="lightbox"><button type="button" data-close style="all:unset;cursor:zoom-out"><img id="lbImg" alt="צילום מסך של המודעה"></button></dialog>
+
+<script>
+const CRITERIA = [
+  ["renovated", "משופצת"], ["location", "מיקום"], ["price", "שכר דירה"],
+  ["shelter", "ממ\"ד / מקלט"], ["size", "גודל"], ["furnished", "מרוהטת"],
+];
+const STATUSES = [
+  ["not_contacted", "לא נוצר קשר", "--s-not"],
+  ["waiting", "ממתין לתשובה", "--s-wait"],
+  ["answered", "ענו", "--s-ans"],
+  ["visit_scheduled", "נקבע ביקור", "--s-sched"],
+  ["visited", "ביקרנו", "--s-vis"],
+  ["irrelevant", "לא רלוונטי", "--s-irr"],
+];
+const PLATFORMS = [["whatsapp", "וואטסאפ"], ["phone", "טלפון"], ["facebook", "פייסבוק"], ["yad2", "יד 2"], ["sms", "SMS"], ["other", "אחר"]];
+const SOURCES = [["yad2", "יד 2"], ["facebook", "פייסבוק"], ["other", "אחר"]];
+const label = (list, k) => (list.find(x => x[0] === k) || [k, k || "—"])[1];
+const $ = id => document.getElementById(id);
+
+let db = null, assets = null, canWrite = false, loaded = false;
+let apts = [], weights = {};
+const filters = { status: null };
+
+// ---- Data helpers ----
+function sourceOf(a) {
+  if (a.source) return a.source;
+  const l = a.link || "";
+  return l.includes("yad2") ? "yad2" : l.includes("facebook") ? "facebook" : "other";
+}
+function shotUrl(a) {
+  if (!a.screenshot) return null;
+  return /^https?:|^\//.test(a.screenshot) ? a.screenshot : "/_blob/" + a.screenshot;
+}
+const weight = k => weights[k] ?? 1;
+function score(a) {
+  let sum = 0, w = 0;
+  for (const [k] of CRITERIA) {
+    const r = a.ratings && a.ratings[k];
+    if (r) { sum += r * weight(k); w += weight(k); }
+  }
+  return w ? sum / w : null;
+}
+const today = () => new Date().toISOString().slice(0, 10);
+
+// One write at a time per document.
+const queues = {};
+function write(id, fn) {
+  queues[id] = (queues[id] || Promise.resolve()).then(fn).catch(err => {
+    showBanner(err && err.code === "invalid_argument" ? "אין לך הרשאת עריכה בדף הזה, אז השינוי לא נשמר." : "השינוי לא נשמר. נסו שוב בעוד רגע.");
+  });
+  return queues[id];
+}
+function updateApt(id, patch) {
+  if (!db || !canWrite) return;
+  write(id, () => db.doc("apartments/" + id).update(patch));
+}
+function showBanner(msg) { const b = $("banner"); b.textContent = msg; b.hidden = !msg; }
+
+// ---- Rendering ----
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const fmtDate = d => d ? new Date(d + "T00:00").toLocaleDateString("he-IL", { day: "numeric", month: "numeric", year: "2-digit" }) : "—";
+function starsHtml(v, id, k, editable) {
+  let h = `<span class="stars${editable ? "" : " ro"}" role="group" aria-label="דירוג">`;
+  for (let i = 1; i <= 5; i++) {
+    h += `<button type="button" class="${i <= (v || 0) ? "" : "off"}" aria-label="${i} מתוך 5"${editable ? ` data-star="${i}" data-id="${esc(id)}" data-k="${k}"` : " tabindex=\"-1\""}>★</button>`;
+  }
+  return h + "</span>";
+}
+function waLink(phone) {
+  let d = String(phone || "").replace(/\D/g, "");
+  if (d.startsWith("0")) d = "972" + d.slice(1);
+  return d ? `https://wa.me/${d}` : null;
+}
+
+function renderKpis() {
+  const counts = Object.fromEntries(STATUSES.map(([k]) => [k, 0]));
+  apts.forEach(a => { counts[a.status] = (counts[a.status] || 0) + 1; });
+  const upcoming = apts.filter(a => a.visitDate && a.visitDate >= today()).length;
+  const tile = (key, v, l) => `<button type="button" class="kpi" data-status="${key}" aria-pressed="${filters.status === (key || null)}"><div class="v">${v}</div><div class="l">${l}</div></button>`;
+  let h = tile("", apts.length, "סה״כ דירות");
+  for (const [k, l, c] of STATUSES) h += tile(k, counts[k] || 0, `<span class="dot" style="background:var(${c})"></span>${l}`);
+  h += tile("__visits", upcoming, "ביקורים קרובים");
+  $("kpis").innerHTML = h;
+}
+
+function render() {
+  renderKpis();
+  $("btnAdd").disabled = !canWrite;
+  const grid = $("grid");
+  if (!loaded) return;
+  if (!apts.length) {
+    grid.innerHTML = `<div class="empty"><b>עוד אין דירות במעקב</b>שלחו ל-Claude קישור או צילום מסך של מודעה מיד 2 או מפייסבוק, והדירה תתווסף כאן עם כל הפרטים.${canWrite ? "<br>אפשר גם להוסיף דירה ידנית עם \"+ דירה חדשה\"." : ""}</div>`;
+    return;
+  }
+  const q = $("q").value.trim().toLowerCase();
+  const hideIrr = $("hideIrr").value === "hide";
+  let list = apts.filter(a => {
+    if (filters.status === "__visits") return a.visitDate && a.visitDate >= today();
+    if (filters.status) return a.status === filters.status;
+    return !(hideIrr && a.status === "irrelevant");
+  });
+  if (q) list = list.filter(a => [a.location, a.description, a.contactName, a.contactPhone, a.notes].join(" ").toLowerCase().includes(q));
+  const far = "9999-99-99";
+  const sorters = {
+    score: (a, b) => (score(b) ?? -1) - (score(a) ?? -1),
+    price: (a, b) => (a.price || Infinity) - (b.price || Infinity),
+    entry: (a, b) => (a.entryDate || far).localeCompare(b.entryDate || far),
+    visit: (a, b) => (a.visitDate || far).localeCompare(b.visitDate || far),
+    added: (a, b) => (b.addedAt || "").localeCompare(a.addedAt || ""),
+  };
+  list.sort(sorters[$("sort").value]);
+  if (!list.length) { grid.innerHTML = `<div class="empty">אין דירות שמתאימות לסינון הזה.</div>`; return; }
+
+  grid.innerHTML = list.map(a => {
+    const s = score(a);
+    const st = STATUSES.find(x => x[0] === a.status) || STATUSES[0];
+    const wa = waLink(a.contactPhone);
+    const shot = shotUrl(a);
+    return `<article class="card${a.status === "irrelevant" ? " irrelevant" : ""}">
+      <button type="button" class="thumb${shot ? " has" : ""}" ${shot ? `data-shot="${esc(shot)}" aria-label="הגדלת צילום המסך"` : "tabindex=\"-1\""}>
+        ${shot ? `<img src="${esc(shot)}" alt="" loading="lazy">` : "אין צילום מסך"}
+        ${s != null ? `<span class="score">${s.toFixed(1)} <span>★</span></span>` : ""}
+        ${a.example ? `<span class="example">דוגמה</span>` : ""}
+      </button>
+      <div class="body">
+        <div class="title">${esc(a.location || "ללא מיקום")}</div>
+        <div class="facts">
+          ${a.price ? `<span><b>₪${Number(a.price).toLocaleString("he-IL")}</b> לחודש</span>` : ""}
+          ${a.rooms ? `<span>${esc(a.rooms)} חד׳</span>` : ""}
+          ${a.size ? `<span>${esc(a.size)} מ״ר</span>` : ""}
+          ${a.floor ? `<span>קומה ${esc(a.floor)}</span>` : ""}
+        </div>
+        ${a.description ? `<div class="desc" title="${esc(a.description)}">${esc(a.description)}</div>` : ""}
+        <div class="row">
+          <span class="dot" style="background:var(${st[2]})"></span>
+          <select class="status-select" data-status-for="${esc(a.id)}" aria-label="סטטוס מענה"${canWrite ? "" : " disabled"}>
+            ${STATUSES.map(([k, l]) => `<option value="${k}"${k === st[0] ? " selected" : ""}>${l}</option>`).join("")}
+          </select>
+          ${a.platform ? `<span class="pill">דרך ${esc(label(PLATFORMS, a.platform))}</span>` : ""}
+        </div>
+        <div class="row"><span class="lbl">איש קשר:</span> ${esc(a.contactName || "—")} ${a.contactPhone ? `<span class="phone">${esc(a.contactPhone)}</span>` : ""}</div>
+        <div class="dates">
+          <div><span class="lbl">ביקור בדירה</span><b>${fmtDate(a.visitDate)}</b></div>
+          <div><span class="lbl">תאריך כניסה</span><b>${fmtDate(a.entryDate)}</b></div>
+        </div>
+        <div class="ratings">${CRITERIA.map(([k, l]) => `<div><span>${l}</span>${starsHtml(a.ratings && a.ratings[k], a.id, k, canWrite)}</div>`).join("")}</div>
+        ${a.notes ? `<div class="notes">${esc(a.notes)}</div>` : ""}
+      </div>
+      <div class="foot">
+        ${a.link ? `<a href="${esc(a.link)}" target="_blank" rel="noopener">למודעה ב${esc(label(SOURCES, sourceOf(a)))}</a>` : ""}
+        ${wa ? `<a href="${wa}" target="_blank" rel="noopener">וואטסאפ</a>` : ""}
+        ${a.contactPhone ? `<button type="button" data-copy="${esc(a.contactPhone)}">העתקת מספר</button>` : ""}
+        ${canWrite ? `<button type="button" data-edit="${esc(a.id)}">עריכה</button>` : ""}
+      </div>
+    </article>`;
+  }).join("");
+}
+
+// ---- Edit dialog ----
+const FIELDS = [
+  ["location", "מיקום", "text", "full"], ["description", "תיאור כללי", "textarea", "full"],
+  ["price", "שכר דירה (₪ לחודש)", "number"], ["rooms", "חדרים", "number"],
+  ["size", "גודל (מ״ר)", "number"], ["floor", "קומה", "text"],
+  ["link", "קישור למודעה", "url", "full"], ["source", "מקור המודעה", SOURCES],
+  ["contactName", "איש קשר", "text"], ["contactPhone", "טלפון", "tel"],
+  ["status", "סטטוס מענה", STATUSES], ["platform", "פלטפורמת יצירת קשר", PLATFORMS],
+  ["visitDate", "תאריך ביקור", "date"], ["entryDate", "תאריך כניסה", "date"],
+  ["notes", "הערות", "textarea", "full"],
+];
+let editingId = null, editRatings = {}, editShot = null, deleteArmed = false;
+function openEdit(id) {
+  const a = id ? apts.find(x => x.id === id) : { status: "not_contacted", ratings: {} };
+  editingId = id; editRatings = { ...(a.ratings || {}) }; editShot = a.screenshot || null; deleteArmed = false;
+  $("editTitle").textContent = id ? "עריכת דירה" : "דירה חדשה";
+  $("btnDelete").hidden = !id; $("btnDelete").textContent = "מחיקה";
+  let h = FIELDS.map(([k, l, t, cls]) => {
+    const v = a[k] ?? "";
+    let input;
+    if (Array.isArray(t)) input = `<select id="f-${k}" name="${k}"><option value="">—</option>${t.map(([o, ol]) => `<option value="${o}"${o === v ? " selected" : ""}>${ol}</option>`).join("")}</select>`;
+    else if (t === "textarea") input = `<textarea id="f-${k}" name="${k}">${esc(v)}</textarea>`;
+    else input = `<input id="f-${k}" name="${k}" type="${t}" value="${esc(v)}"${t === "number" ? ' step="any"' : ""}>`;
+    return `<label class="${cls || ""}">${l}${input}</label>`;
+  }).join("");
+  h += `<div class="full"><div class="lbl" style="margin-bottom:4px">צילום מסך של המודעה</div><div class="shot-edit" id="shotEdit"></div></div>`;
+  h += `<div class="full lbl">דירוג (לחיצה שנייה על אותו כוכב מבטלת)</div><div class="full ratings" id="editStars"></div>`;
+  $("editBody").innerHTML = h;
+  renderShotEdit(); renderEditStars();
+  $("editDlg").showModal();
+}
+function renderShotEdit() {
+  const url = editShot ? shotUrl({ screenshot: editShot }) : null;
+  $("shotEdit").innerHTML = `${url ? `<img src="${esc(url)}" alt="">` : `<span class="lbl">אין צילום</span>`}
+    ${assets ? `<label class="btn" style="flex-direction:row;color:var(--text)">${url ? "החלפה" : "העלאת צילום"}<input id="f-shot" type="file" accept="image/*" hidden></label>` : ""}
+    ${url ? `<button type="button" class="btn" id="shotRemove">הסרה</button>` : ""}
+    <span class="lbl" id="shotMsg"></span>`;
+}
+function renderEditStars() {
+  $("editStars").innerHTML = CRITERIA.map(([k, l]) => `<div><span>${l}</span>${starsHtml(editRatings[k], "__edit", k, true)}</div>`).join("");
+}
+function closeDialogs() { document.querySelectorAll("dialog[open]").forEach(d => d.close()); }
+
+$("editForm").addEventListener("submit", async e => {
+  e.preventDefault();
+  if (!db) return;
+  const fd = new FormData(e.target);
+  const data = { ratings: Object.fromEntries(CRITERIA.map(([k]) => [k, editRatings[k] || null])), screenshot: editShot };
+  for (const [k, , t] of FIELDS) {
+    let v = fd.get(k);
+    if (t === "number") v = v === "" ? null : Number(v);
+    else if (v === "") v = null;
+    data[k] = v;
+  }
+  if (editingId) updateApt(editingId, data);
+  else {
+    const ref = db.collection("apartments").doc();
+    write(ref.id, () => ref.set({ ...data, addedAt: today() }));
+  }
+  closeDialogs();
+});
+$("btnDelete").addEventListener("click", () => {
+  if (!deleteArmed) { deleteArmed = true; $("btnDelete").textContent = "ללחוץ שוב כדי למחוק"; return; }
+  const id = editingId;
+  write(id, () => db.doc("apartments/" + id).delete());
+  closeDialogs();
+});
+$("editBody").addEventListener("change", async e => {
+  if (e.target.id !== "f-shot" || !e.target.files[0] || !assets) return;
+  const file = e.target.files[0];
+  $("shotMsg").textContent = "מעלה…"; $("btnSave").disabled = true;
+  try {
+    const res = await assets.upload(file);
+    editShot = res.id; renderShotEdit();
+  } catch (err) {
+    $("shotMsg").textContent = err && err.code === "too_large" ? "הקובץ גדול מדי (עד 20MB)." : "ההעלאה לא הצליחה. נסו שוב.";
+  } finally { $("btnSave").disabled = false; }
+});
+
+// ---- Weights ----
+let weightTimer = null;
+function renderWeights() {
+  $("weightsBody").innerHTML = CRITERIA.map(([k, l]) =>
+    `<label><span>${l}</span><input id="w-${k}" type="range" min="0" max="3" step="0.5" value="${weight(k)}" data-w="${k}"${canWrite ? "" : " disabled"}><b>${weight(k)}</b></label>`).join("");
+}
+$("weightsBody").addEventListener("input", e => {
+  const k = e.target.dataset.w; if (!k) return;
+  weights = { ...weights, [k]: Number(e.target.value) };
+  e.target.nextElementSibling.textContent = e.target.value;
+  render();
+  clearTimeout(weightTimer);
+  weightTimer = setTimeout(() => { const w = { ...weights }; write("settings", () => db.doc("settings/weights").set(w)); }, 600);
+});
+
+// ---- Events ----
+document.addEventListener("click", e => {
+  const t = e.target;
+  if (t.closest("[data-close]")) return closeDialogs();
+  const star = t.closest("[data-star]");
+  if (star) {
+    const v = Number(star.dataset.star), k = star.dataset.k;
+    if (star.dataset.id === "__edit") { editRatings[k] = editRatings[k] === v ? null : v; renderEditStars(); }
+    else {
+      const a = apts.find(x => x.id === star.dataset.id);
+      updateApt(a.id, { ratings: { [k]: a.ratings && a.ratings[k] === v ? null : v } });
+    }
+    return;
+  }
+  if (t.id === "shotRemove") { editShot = null; return renderShotEdit(); }
+  const edit = t.closest("[data-edit]"); if (edit) return openEdit(edit.dataset.edit);
+  const copy = t.closest("[data-copy]");
+  if (copy) {
+    navigator.clipboard.writeText(copy.dataset.copy).then(() => { copy.textContent = "הועתק"; }, () => { copy.textContent = copy.dataset.copy; });
+    return;
+  }
+  const kpi = t.closest(".kpi");
+  if (kpi) { const s = kpi.dataset.status || null; filters.status = filters.status === s ? null : s; return render(); }
+  const shot = t.closest("[data-shot]");
+  if (shot) { $("lbImg").src = shot.dataset.shot; $("lightbox").showModal(); }
+});
+document.addEventListener("change", e => {
+  const id = e.target.dataset.statusFor;
+  if (id) updateApt(id, { status: e.target.value });
+});
+$("q").addEventListener("input", render);
+$("sort").addEventListener("change", render);
+$("hideIrr").addEventListener("change", render);
+$("btnAdd").addEventListener("click", () => openEdit(null));
+$("btnWeights").addEventListener("click", () => { renderWeights(); $("weightsDlg").showModal(); });
+
+// ---- Boot ----
+render();
+(async () => {
+  db = window.claude ? await window.claude.use("db") : null;
+  if (!db) {
+    $("syncNote").textContent = "";
+    loaded = true; render();
+    $("grid").innerHTML = `<div class="empty"><b>הנתונים לא זמינים כאן</b>פתחו את הדף ב-claude.ai כשאתם מחוברים לחשבון כדי לראות את הדירות.</div>`;
+    return;
+  }
+  const user = await window.claude.use("user");
+  const can = user ? await user.can("data.write") : null;
+  canWrite = can !== false;
+  assets = canWrite ? await window.claude.use("assets") : null;
+  $("syncNote").textContent = canWrite ? "השינויים נשמרים אוטומטית ומשותפים לכל מי שפותח את הדף." : "מצב צפייה בלבד.";
+  db.collection("apartments").onSnapshot(snap => {
+    apts = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    loaded = true; render();
+  }, () => showBanner("החיבור לנתונים נותק. רעננו את הדף."));
+  db.doc("settings/weights").onSnapshot(snap => {
+    weights = snap.exists ? { ...snap.data() } : {};
+    render();
+  }, () => {});
+})();
+</script>
