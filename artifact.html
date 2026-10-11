@@ -7,7 +7,7 @@
   --bg: #f4f6f5; --surface: #ffffff; --surface-2: #eef1ef; --border: #d9dfdc;
   --text: #17201c; --muted: #5f6b66; --accent: #1f6f5c; --accent-ink: #ffffff;
   --star: #e3a008; --star-off: #d4dad7; --danger: #c23b3b;
-  --s-not: #87918d; --s-wait: #c9800a; --s-ans: #2f6fde; --s-sched: #7a4fd6; --s-vis: #1f9d63; --s-irr: #b3bbb7;
+  --s-not: #87918d; --s-cont: #0e8f8f; --s-wait: #c9800a; --s-ans: #2f6fde; --s-sched: #7a4fd6; --s-vis: #1f9d63; --s-irr: #b3bbb7;
   --display: "Rubik", "Heebo", system-ui, sans-serif;
   --body: "Heebo", system-ui, sans-serif;
   --shadow: 0 1px 2px rgba(20,40,30,.06), 0 2px 6px rgba(20,40,30,.05);
@@ -67,6 +67,11 @@ button, select, input, textarea { font: inherit; color: inherit; }
 .phone { font-variant-numeric: tabular-nums; user-select: all; direction: ltr; unicode-bidi: isolate; }
 .dates { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; background: var(--surface-2); border-radius: 8px; padding: 8px 10px; font-size: 14px; }
 .dates b { display: block; font-variant-numeric: tabular-nums; }
+.sched { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; background: var(--surface-2); border: 1px solid var(--s-sched); border-radius: 8px; padding: 8px 10px; font-size: 13px; }
+.sched input { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 4px 6px; font-size: 14px; font-variant-numeric: tabular-nums; min-width: 0; }
+.chips { display: inline-flex; gap: 4px; flex-wrap: wrap; align-items: center; }
+.chip { border: 1px solid var(--border); background: var(--surface); border-radius: 20px; padding: 2px 10px; font-size: 13px; cursor: pointer; }
+.chip[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
 .ratings { display: grid; grid-template-columns: 1fr 1fr; gap: 3px 14px; font-size: 13px; }
 .ratings > div { display: flex; justify-content: space-between; align-items: center; gap: 6px; }
 .stars { color: var(--star); white-space: nowrap; display: inline-flex; }
@@ -172,12 +177,16 @@ const CRITERIA = [
 ];
 const STATUSES = [
   ["not_contacted", "לא נוצר קשר", "--s-not"],
+  ["contacted", "נוצר קשר", "--s-cont"],
   ["waiting", "ממתין לתשובה", "--s-wait"],
   ["answered", "ענו", "--s-ans"],
   ["visit_scheduled", "נקבע ביקור", "--s-sched"],
   ["visited", "ביקרנו", "--s-vis"],
   ["irrelevant", "לא רלוונטי", "--s-irr"],
 ];
+// Statuses after first contact, where the card asks which platform was used.
+const CONTACTED = ["contacted", "waiting", "answered", "visit_scheduled", "visited"];
+const QUICK_PLATFORMS = [["facebook", "פייסבוק"], ["whatsapp", "וואטסאפ"]];
 const PLATFORMS = [["whatsapp", "וואטסאפ"], ["phone", "טלפון"], ["facebook", "פייסבוק"], ["yad2", "יד 2"], ["sms", "SMS"], ["other", "אחר"]];
 const SOURCES = [["yad2", "יד 2"], ["facebook", "פייסבוק"], ["other", "אחר"]];
 const label = (list, k) => (list.find(x => x[0] === k) || [k, k || "—"])[1];
@@ -277,7 +286,7 @@ function render() {
     score: (a, b) => (score(b) ?? -1) - (score(a) ?? -1),
     price: (a, b) => (a.price || Infinity) - (b.price || Infinity),
     entry: (a, b) => (a.entryDate || far).localeCompare(b.entryDate || far),
-    visit: (a, b) => (a.visitDate || far).localeCompare(b.visitDate || far),
+    visit: (a, b) => ((a.visitDate || far) + (a.visitTime || "")).localeCompare((b.visitDate || far) + (b.visitTime || "")),
     added: (a, b) => (b.addedAt || "").localeCompare(a.addedAt || ""),
   };
   list.sort(sorters[$("sort").value]);
@@ -310,11 +319,16 @@ function render() {
           <select class="status-select" data-status-for="${esc(a.id)}" aria-label="סטטוס מענה"${canWrite ? "" : " disabled"}>
             ${STATUSES.map(([k, l]) => `<option value="${k}"${k === st[0] ? " selected" : ""}>${l}</option>`).join("")}
           </select>
-          ${a.platform ? `<span class="pill">דרך ${esc(label(PLATFORMS, a.platform))}</span>` : ""}
+          ${CONTACTED.includes(st[0]) && canWrite
+            ? `<span class="chips" role="group" aria-label="פלטפורמת יצירת קשר"><span class="lbl">דרך</span>${QUICK_PLATFORMS.map(([k, l]) => `<button type="button" class="chip" data-platform="${k}" data-id="${esc(a.id)}" aria-pressed="${a.platform === k}">${l}</button>`).join("")}${a.platform && !QUICK_PLATFORMS.some(q => q[0] === a.platform) ? `<span class="pill">${esc(label(PLATFORMS, a.platform))}</span>` : ""}</span>`
+            : a.platform ? `<span class="pill">דרך ${esc(label(PLATFORMS, a.platform))}</span>` : ""}
         </div>
+        ${st[0] === "visit_scheduled" && canWrite ? `<div class="sched"><span>מועד הביקור:</span>
+          <input type="date" id="vd-${esc(a.id)}" data-visit-date="${esc(a.id)}" value="${esc(a.visitDate || "")}" aria-label="תאריך הביקור">
+          <input type="time" id="vt-${esc(a.id)}" data-visit-time="${esc(a.id)}" value="${esc(a.visitTime || "")}" aria-label="שעת הביקור"></div>` : ""}
         <div class="row"><span class="lbl">איש קשר:</span> ${esc(a.contactName || "—")} ${a.contactPhone ? `<span class="phone">${esc(a.contactPhone)}</span>` : ""}</div>
         <div class="dates">
-          <div><span class="lbl">ביקור בדירה</span><b>${fmtDate(a.visitDate)}</b></div>
+          <div><span class="lbl">ביקור בדירה</span><b>${fmtDate(a.visitDate)}${a.visitDate && a.visitTime ? " · " + esc(a.visitTime) : ""}</b></div>
           <div><span class="lbl">תאריך כניסה</span><b>${fmtDate(a.entryDate)}</b></div>
         </div>
         <div class="ratings">${CRITERIA.map(([k, l]) => `<div><span>${l}</span>${starsHtml(a.ratings && a.ratings[k], a.id, k, canWrite)}</div>`).join("")}</div>
@@ -339,7 +353,8 @@ const FIELDS = [
   ["link", "קישור למודעה", "url", "full"], ["source", "מקור המודעה", SOURCES],
   ["contactName", "איש קשר", "text"], ["contactPhone", "טלפון", "tel"],
   ["status", "סטטוס מענה", STATUSES], ["platform", "פלטפורמת יצירת קשר", PLATFORMS],
-  ["visitDate", "תאריך ביקור", "date"], ["entryDate", "תאריך כניסה", "date"],
+  ["visitDate", "תאריך ביקור", "date"], ["visitTime", "שעת ביקור", "time"],
+  ["entryDate", "תאריך כניסה", "date"],
   ["notes", "הערות", "textarea", "full"],
 ];
 let editingId = null, editRatings = {}, editShot = null, deleteArmed = false;
@@ -626,6 +641,11 @@ document.addEventListener("click", e => {
     }
     return;
   }
+  const chip = t.closest("[data-platform]");
+  if (chip) {
+    const a = apts.find(x => x.id === chip.dataset.id);
+    return updateApt(chip.dataset.id, { platform: a && a.platform === chip.dataset.platform ? null : chip.dataset.platform });
+  }
   if (t.id === "shotRemove") { editShot = null; return renderShotEdit(); }
   if (t.id === "shotFill") return fillFromShot(t);
   const refetch = t.closest("[data-refetch]");
@@ -647,8 +667,15 @@ document.addEventListener("click", e => {
   if (shot) { $("lbImg").src = shot.dataset.shot; $("lightbox").showModal(); }
 });
 document.addEventListener("change", e => {
-  const id = e.target.dataset.statusFor;
-  if (id) updateApt(id, { status: e.target.value });
+  const t = e.target, id = t.dataset.statusFor;
+  if (id) {
+    updateApt(id, { status: t.value });
+    // Move focus to the new date field so the visit time is set right away.
+    if (t.value === "visit_scheduled") setTimeout(() => { const d = $("vd-" + id); if (d && !d.value) d.focus(); }, 300);
+    return;
+  }
+  if (t.dataset.visitDate) return updateApt(t.dataset.visitDate, { visitDate: t.value || null });
+  if (t.dataset.visitTime) return updateApt(t.dataset.visitTime, { visitTime: t.value || null });
 });
 $("q").addEventListener("input", render);
 $("sort").addEventListener("change", render);
