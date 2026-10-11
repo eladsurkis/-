@@ -79,6 +79,13 @@ button, select, input, textarea { font: inherit; color: inherit; }
 .foot a, .foot button { font-size: 13px; text-decoration: none; color: var(--accent); background: none; border: 1px solid var(--border); border-radius: 6px; padding: 4px 10px; cursor: pointer; }
 .empty { text-align: center; padding: 56px 16px; color: var(--muted); background: var(--surface); border: 1px dashed var(--border); border-radius: 12px; grid-column: 1 / -1; }
 .empty b { color: var(--text); display: block; font-family: var(--display); font-size: 18px; margin-bottom: 6px; }
+.linkbar { display: flex; gap: 8px; flex-wrap: wrap; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 12px; }
+.linkbar input { flex: 1; flex-basis: 240px; min-width: 0; background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; direction: ltr; text-align: right; }
+.linkbar .sub { flex-basis: 100%; }
+.fetch { position: absolute; bottom: 10px; right: 10px; left: 10px; border-radius: 8px; padding: 4px 10px; font-size: 12px; text-align: right; background: var(--surface); border: 1px solid var(--border); color: var(--text); }
+.fetch.failed { border-color: var(--danger); color: var(--danger); }
+.fetch.pending::before { content: ""; display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--s-wait); margin-inline-end: 6px; animation: pulse 1.2s ease-in-out infinite; }
+@keyframes pulse { 50% { opacity: .3; } }
 .banner { background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; font-size: 13px; color: var(--muted); }
 dialog { border: none; border-radius: 14px; padding: 0; background: var(--surface); color: var(--text); width: min(680px, calc(100vw - 32px)); max-height: calc(100vh - 32px); direction: rtl; }
 dialog::backdrop { background: rgba(0,0,0,.5); }
@@ -99,7 +106,7 @@ dialog::backdrop { background: rgba(0,0,0,.5); }
 .weights label { display: grid; grid-template-columns: 1fr 2fr auto; align-items: center; gap: 8px; font-size: 14px; }
 .weights b { font-variant-numeric: tabular-nums; min-width: 2ch; }
 @media (max-width: 560px) { .dlg-body, .weights { grid-template-columns: 1fr; } }
-@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
 </style>
 
 <div class="wrap">
@@ -111,6 +118,11 @@ dialog::backdrop { background: rgba(0,0,0,.5); }
     <button class="btn" id="btnWeights" type="button">משקלות דירוג</button>
     <button class="btn primary" id="btnAdd" type="button">+ דירה חדשה</button>
   </header>
+  <form class="linkbar" id="linkForm">
+    <input id="linkInput" type="url" inputmode="url" placeholder="הדביקו קישור למודעה ביד 2 או בפייסבוק" aria-label="קישור למודעה" required>
+    <button class="btn primary" type="submit" id="btnLink">הוספה מקישור</button>
+    <div class="sub" id="linkMsg">Claude יפתח את המודעה, ימלא את הפרטים וישמור צילום מסך. זה לוקח כמה דקות.</div>
+  </form>
   <div class="banner" id="banner" hidden></div>
   <section class="kpis" id="kpis" aria-label="סיכום לפי סטטוס"></section>
   <section class="toolbar">
@@ -171,7 +183,9 @@ const SOURCES = [["yad2", "יד 2"], ["facebook", "פייסבוק"], ["other", "
 const label = (list, k) => (list.find(x => x[0] === k) || [k, k || "—"])[1];
 const $ = id => document.getElementById(id);
 
-let db = null, assets = null, canWrite = false, loaded = false;
+let db = null, assets = null, sample = null, mcp = null, canImages = false, canWrite = false, loaded = false;
+// The routine that opens pasted links and fills the card (Claude Code cloud session).
+const ROUTINE_ID = "trig_01JUK5aS6LtCrMDXwBiRb3f2";
 let apts = [], weights = {};
 const filters = { status: null };
 
@@ -275,9 +289,11 @@ function render() {
         ${shot ? `<img src="${esc(shot)}" alt="" loading="lazy">` : "אין צילום מסך"}
         ${s != null ? `<span class="score">${s.toFixed(1)} <span>★</span></span>` : ""}
         ${a.example ? `<span class="example">דוגמה</span>` : ""}
+        ${a.fetchState === "pending" ? `<span class="fetch pending">Claude שולף את פרטי המודעה…</span>` : ""}
+        ${a.fetchState === "failed" ? `<span class="fetch failed">לא הצלחתי לקרוא את המודעה${a.fetchError ? ": " + esc(a.fetchError) : ""}</span>` : ""}
       </button>
       <div class="body">
-        <div class="title">${esc(a.location || "ללא מיקום")}</div>
+        <div class="title">${esc(a.location || (a.link ? "מודעה ב" + label(SOURCES, sourceOf(a)) : "ללא מיקום"))}</div>
         <div class="facts">
           ${a.price ? `<span><b>₪${Number(a.price).toLocaleString("he-IL")}</b> לחודש</span>` : ""}
           ${a.rooms ? `<span>${esc(a.rooms)} חד׳</span>` : ""}
@@ -304,7 +320,8 @@ function render() {
         ${a.link ? `<a href="${esc(a.link)}" target="_blank" rel="noopener">למודעה ב${esc(label(SOURCES, sourceOf(a)))}</a>` : ""}
         ${wa ? `<a href="${wa}" target="_blank" rel="noopener">וואטסאפ</a>` : ""}
         ${a.contactPhone ? `<button type="button" data-copy="${esc(a.contactPhone)}">העתקת מספר</button>` : ""}
-        ${canWrite ? `<button type="button" data-edit="${esc(a.id)}">עריכה</button>` : ""}
+        ${canWrite ? `<button type="button" data-edit="${esc(a.id)}">${a.fetchState === "failed" ? "העלאת צילום ומילוי" : "עריכה"}</button>` : ""}
+        ${canWrite && a.link && (a.fetchState === "failed" || a.fetchState === "pending") ? `<button type="button" data-refetch="${esc(a.id)}">${a.fetchState === "failed" ? "ניסיון חוזר" : "שליפה עכשיו"}</button>` : ""}
       </div>
     </article>`;
   }).join("");
@@ -346,6 +363,7 @@ function renderShotEdit() {
   $("shotEdit").innerHTML = `${url ? `<img src="${esc(url)}" alt="">` : `<span class="lbl">אין צילום</span>`}
     ${assets ? `<label class="btn" style="flex-direction:row;color:var(--text)">${url ? "החלפה" : "העלאת צילום"}<input id="f-shot" type="file" accept="image/*" hidden></label>` : ""}
     ${url ? `<button type="button" class="btn" id="shotRemove">הסרה</button>` : ""}
+    ${url && sample && canImages ? `<button type="button" class="btn primary" id="shotFill">מילוי פרטים מהצילום</button>` : ""}
     <span class="lbl" id="shotMsg"></span>`;
 }
 function renderEditStars() {
@@ -364,7 +382,11 @@ $("editForm").addEventListener("submit", async e => {
     else if (v === "") v = null;
     data[k] = v;
   }
-  if (editingId) updateApt(editingId, data);
+  if (editingId) {
+    const cur = apts.find(x => x.id === editingId);
+    if (cur && cur.fetchState === "failed" && data.location) data.fetchState = "done";
+    updateApt(editingId, data);
+  }
   else {
     const ref = db.collection("apartments").doc();
     write(ref.id, () => ref.set({ ...data, addedAt: today() }));
@@ -388,6 +410,63 @@ $("editBody").addEventListener("change", async e => {
     $("shotMsg").textContent = err && err.code === "too_large" ? "הקובץ גדול מדי (עד 20MB)." : "ההעלאה לא הצליחה. נסו שוב.";
   } finally { $("btnSave").disabled = false; }
 });
+
+// ---- Add from link ----
+async function fireRoutine() {
+  if (!mcp) return false;
+  try {
+    await mcp.callTool("Claude Code Remote", "fire_trigger", { trigger_id: ROUTINE_ID }, { cache: false });
+    return true;
+  } catch { return false; }
+}
+$("linkForm").addEventListener("submit", async e => {
+  e.preventDefault();
+  if (!db || !canWrite) return;
+  const link = $("linkInput").value.trim();
+  if (!/^https?:\/\//.test(link)) { $("linkMsg").textContent = "הקישור צריך להתחיל ב-https://"; return; }
+  if (apts.some(a => a.link === link)) { $("linkMsg").textContent = "הדירה הזו כבר ברשימה."; return; }
+  $("btnLink").disabled = true;
+  const ref = db.collection("apartments").doc();
+  await write(ref.id, () => ref.set({ link, source: sourceOf({ link }), status: "not_contacted", fetchState: "pending", ratings: {}, addedAt: today() }));
+  $("linkInput").value = "";
+  const fired = await fireRoutine();
+  $("linkMsg").textContent = fired
+    ? "נוסף. Claude פותח את המודעה, והכרטיס יתמלא בעוד כמה דקות."
+    : "נוסף, אבל לא הצלחתי להפעיל את השליפה מכאן. בקשו מ-Claude בצ'אט לשלוף את המודעות הממתינות, או נסו \"שליפה עכשיו\" בכרטיס.";
+  $("btnLink").disabled = false;
+});
+
+// Fill the edit form from the screenshot (for listings the routine could not open).
+async function fillFromShot(btn) {
+  const url = shotUrl({ screenshot: editShot });
+  btn.disabled = true; $("shotMsg").textContent = "Claude קורא את הצילום…";
+  try {
+    const blob = await (await fetch(url)).blob();
+    const data = await sample.json(
+      "This image is a screenshot of a rental apartment ad in Israel (Yad2 or a Facebook post), usually in Hebrew. " +
+      "Extract only what the ad states; use null for anything not shown. Do not guess. Reply with only a JSON object with these keys: " +
+      '{"location": "street, neighborhood, city in Hebrew", "description": "2-3 sentence Hebrew summary", "price": monthly rent in ILS as number, ' +
+      '"rooms": number, "size": square meters as number, "floor": "e.g. 2 מתוך 4", "contactName": string, "contactPhone": string, ' +
+      '"entryDate": "YYYY-MM-DD or null", "notes": "short Hebrew list of notable features (ממ\"ד, מרפסת, חניה, ריהוט...)", ' +
+      '"hasShelterInApartment": boolean or null, "furnished": "full" | "partial" | "none" | null, "renovated": boolean or null}',
+      { images: [blob] });
+    const form = $("editForm");
+    let filled = 0;
+    for (const k of ["location", "description", "price", "rooms", "size", "floor", "contactName", "contactPhone", "entryDate", "notes"]) {
+      const el = form.elements[k];
+      if (el && !el.value && data[k] != null && data[k] !== "") { el.value = data[k]; filled++; }
+    }
+    if (data.hasShelterInApartment === true && !editRatings.shelter) editRatings.shelter = 5;
+    if (data.furnished === "full" && !editRatings.furnished) editRatings.furnished = 5;
+    if (data.furnished === "partial" && !editRatings.furnished) editRatings.furnished = 3;
+    if (data.renovated === true && !editRatings.renovated) editRatings.renovated = 5;
+    renderEditStars();
+    $("shotMsg").textContent = filled ? `מולאו ${filled} שדות. בדקו ולחצו "שמירה".` : "לא נמצאו בצילום פרטים להוספה.";
+  } catch (err) {
+    const code = err && err.code;
+    $("shotMsg").textContent = code === "not_granted" || code === "sampling_disabled" ? "המילוי האוטומטי לא אושר בדף הזה." : code === "rate_limited" ? "יותר מדי בקשות. נסו שוב בעוד כמה דקות." : "לא הצלחתי לקרוא את הצילום. נסו שוב או מלאו ידנית.";
+  } finally { btn.disabled = false; }
+}
 
 // ---- Weights ----
 let weightTimer = null;
@@ -419,6 +498,14 @@ document.addEventListener("click", e => {
     return;
   }
   if (t.id === "shotRemove") { editShot = null; return renderShotEdit(); }
+  if (t.id === "shotFill") return fillFromShot(t);
+  const refetch = t.closest("[data-refetch]");
+  if (refetch) {
+    refetch.disabled = true;
+    updateApt(refetch.dataset.refetch, { fetchState: "pending" });
+    fireRoutine().then(ok => { if (!ok) showBanner("לא הצלחתי להפעיל את השליפה מכאן. בקשו מ-Claude בצ'אט לשלוף את המודעות הממתינות."); });
+    return;
+  }
   const edit = t.closest("[data-edit]"); if (edit) return openEdit(edit.dataset.edit);
   const copy = t.closest("[data-copy]");
   if (copy) {
@@ -454,6 +541,11 @@ render();
   const can = user ? await user.can("data.write") : null;
   canWrite = can !== false;
   assets = canWrite ? await window.claude.use("assets") : null;
+  if (canWrite) {
+    [sample, mcp] = await Promise.all([window.claude.use("sample"), window.claude.use("mcp")]);
+    if (sample) canImages = !!(await sample.limits().catch(() => null))?.images;
+  }
+  $("linkForm").hidden = !canWrite;
   $("syncNote").textContent = canWrite ? "השינויים נשמרים אוטומטית ומשותפים לכל מי שפותח את הדף." : "מצב צפייה בלבד.";
   db.collection("apartments").onSnapshot(snap => {
     apts = snap.docs.map(d => ({ id: d.id, ...d.data() }));

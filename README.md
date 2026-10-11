@@ -12,3 +12,9 @@
 
 `artifact.html` היא הגרסה שמפורסמת כדף ב-claude.ai: https://claude.ai/artifact/WpEzXSB2aW6Lv7WjEgV1zw
 בגרסה הזו הנתונים נשמרים בשרת ומשותפים לכל מי שיש לו גישה לדף, וצילומי מסך מועלים ישירות מהדף.
+
+### הוספה מקישור
+מדביקים בדף קישור ליד 2 או לפייסבוק ← הדף יוצר רשומה עם `fetchState: "pending"` ומפעיל Routine של Claude Code (`trig_01JUK5aS6LtCrMDXwBiRb3f2`).
+ה-Routine פותח את הקישור עם `scripts/fetch_listing.js` (Playwright), מחלץ את הפרטים, מעלה צילום מסך וממלא את הכרטיס.
+אם המודעה לא נפתחה (למשל פוסט פייסבוק שדורש התחברות), אפשר להעלות צילום מסך בדף ולמלא ממנו את הפרטים אוטומטית.
+דרישה: הדומיינים `yad2.co.il`, `*.yad2.co.il`, `facebook.com`, `*.facebook.com`, `*.fbcdn.net` צריכים להופיע ב-Allowed domains של הסביבה.
