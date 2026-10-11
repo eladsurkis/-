@@ -1,0 +1,408 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>מעקב דירות להשכרה</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #f5f6f8; --surface: #ffffff; --surface-2: #f0f2f5; --border: #dfe3e8;
+  --text: #1c2330; --muted: #667085; --accent: #2f6fde; --accent-soft: #e6eefc;
+  --star: #f2a900; --danger: #d14343;
+  --s-not: #8a94a6; --s-wait: #d98a00; --s-ans: #2f6fde; --s-sched: #7a4fd6; --s-vis: #1f9d63; --s-irr: #b0b7c3;
+  --shadow: 0 1px 2px rgba(16,24,40,.06), 0 1px 3px rgba(16,24,40,.08);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #12151b; --surface: #1b1f27; --surface-2: #232834; --border: #2e3442;
+    --text: #e7eaf0; --muted: #98a2b3; --accent: #6b9bff; --accent-soft: #1f2a44;
+    --s-irr: #5b6372; --shadow: none;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #12151b; --surface: #1b1f27; --surface-2: #232834; --border: #2e3442;
+  --text: #e7eaf0; --muted: #98a2b3; --accent: #6b9bff; --accent-soft: #1f2a44;
+  --s-irr: #5b6372; --shadow: none;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text); font-family: "Heebo", system-ui, sans-serif; font-size: 15px; }
+header { padding: 20px 16px 8px; max-width: 1200px; margin: 0 auto; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+h1 { font-size: 22px; margin: 0; flex: 1; }
+main { max-width: 1200px; margin: 0 auto; padding: 0 16px 48px; }
+button, select, input, textarea { font: inherit; color: inherit; }
+.btn { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 7px 14px; cursor: pointer; }
+.btn:hover { background: var(--surface-2); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.btn.danger { color: var(--danger); }
+.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin: 12px 0 16px; }
+.kpi { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; box-shadow: var(--shadow); cursor: pointer; }
+.kpi.active { outline: 2px solid var(--accent); }
+.kpi .v { font-size: 24px; font-weight: 700; }
+.kpi .l { color: var(--muted); font-size: 13px; display: flex; align-items: center; gap: 6px; }
+.toolbar { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }
+.toolbar input, .toolbar select { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 7px 10px; }
+.toolbar input { flex: 1; min-width: 180px; }
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(330px, 1fr)); gap: 14px; }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; box-shadow: var(--shadow); display: flex; flex-direction: column; }
+.card.irrelevant { opacity: .55; }
+.thumb { height: 150px; background: var(--surface-2); display: flex; align-items: center; justify-content: center; color: var(--muted); cursor: zoom-in; position: relative; }
+.thumb img { width: 100%; height: 100%; object-fit: cover; object-position: top; }
+.score { position: absolute; top: 10px; left: 10px; background: rgba(0,0,0,.72); color: #fff; border-radius: 20px; padding: 3px 10px; font-weight: 700; font-size: 14px; }
+.body { padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; flex: 1; }
+.title { font-weight: 700; font-size: 16px; }
+.meta { color: var(--muted); font-size: 13px; display: flex; gap: 10px; flex-wrap: wrap; }
+.desc { font-size: 14px; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 14px; }
+.pill { display: inline-flex; align-items: center; gap: 6px; border-radius: 20px; padding: 2px 10px; font-size: 13px; background: var(--surface-2); }
+.dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+.status-select { border: 1px solid var(--border); border-radius: 20px; padding: 3px 8px; background: var(--surface-2); font-size: 13px; }
+.ratings { display: grid; grid-template-columns: 1fr 1fr; gap: 2px 14px; font-size: 13px; }
+.ratings div { display: flex; justify-content: space-between; align-items: center; }
+.stars { color: var(--star); letter-spacing: 1px; white-space: nowrap; }
+.stars .off { color: var(--border); }
+.stars.edit span { cursor: pointer; }
+.foot { display: flex; gap: 6px; padding: 10px 14px; border-top: 1px solid var(--border); flex-wrap: wrap; }
+.foot a, .foot button { font-size: 13px; text-decoration: none; color: var(--accent); background: none; border: 1px solid var(--border); border-radius: 6px; padding: 4px 10px; cursor: pointer; }
+.empty { text-align: center; padding: 60px 16px; color: var(--muted); background: var(--surface); border: 1px dashed var(--border); border-radius: 12px; }
+.empty b { color: var(--text); display: block; font-size: 18px; margin-bottom: 6px; }
+dialog { border: none; border-radius: 14px; padding: 0; background: var(--surface); color: var(--text); width: min(680px, calc(100vw - 32px)); max-height: calc(100vh - 32px); }
+dialog::backdrop { background: rgba(0,0,0,.5); }
+.dlg-head { padding: 14px 18px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; font-weight: 700; }
+.dlg-body { padding: 16px 18px; display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.dlg-body label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--muted); }
+.dlg-body .full { grid-column: 1 / -1; }
+.dlg-body input, .dlg-body select, .dlg-body textarea { background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px; padding: 7px 10px; color: var(--text); font-size: 15px; }
+.dlg-body textarea { min-height: 70px; resize: vertical; }
+.dlg-body .stars { font-size: 20px; }
+.dlg-foot { padding: 12px 18px; border-top: 1px solid var(--border); display: flex; gap: 8px; justify-content: flex-start; }
+.dlg-foot .spacer { flex: 1; }
+#lightbox { background: transparent; width: auto; max-width: 95vw; }
+#lightbox img { max-width: 95vw; max-height: 90vh; display: block; border-radius: 8px; }
+.weights { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 16px; padding: 16px 18px; }
+.weights label { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 14px; }
+.weights input { width: 100%; }
+@media (max-width: 520px) {
+  .dlg-body, .weights { grid-template-columns: 1fr; }
+  .grid { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+<header>
+  <h1>🏠 מעקב דירות להשכרה</h1>
+  <button class="btn" id="btnWeights">⚖️ משקלות דירוג</button>
+  <button class="btn" id="btnExport">⬇️ ייצוא</button>
+  <button class="btn primary" id="btnAdd">+ דירה חדשה</button>
+</header>
+<main>
+  <section class="kpis" id="kpis"></section>
+  <section class="toolbar">
+    <input id="q" type="search" placeholder="חיפוש לפי מיקום, איש קשר, תיאור…">
+    <select id="sort">
+      <option value="score">מיון: ציון כולל</option>
+      <option value="price">מיון: מחיר (נמוך→גבוה)</option>
+      <option value="entry">מיון: תאריך כניסה</option>
+      <option value="visit">מיון: תאריך ביקור</option>
+      <option value="added">מיון: נוסף לאחרונה</option>
+    </select>
+    <select id="hideIrr">
+      <option value="hide">הסתר לא רלוונטיות</option>
+      <option value="show">הצג הכל</option>
+    </select>
+  </section>
+  <section class="grid" id="grid"></section>
+</main>
+
+<dialog id="editDlg">
+  <form method="dialog" id="editForm">
+    <div class="dlg-head"><span id="editTitle">דירה</span><button class="btn" value="cancel" formnovalidate>✕</button></div>
+    <div class="dlg-body" id="editBody"></div>
+    <div class="dlg-foot">
+      <button class="btn primary" value="save">שמירה</button>
+      <button class="btn" value="cancel" formnovalidate>ביטול</button>
+      <span class="spacer"></span>
+      <button class="btn danger" value="delete" id="btnDelete" formnovalidate>מחיקה</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="weightsDlg">
+  <form method="dialog">
+    <div class="dlg-head"><span>משקל כל פרמטר בציון הכולל</span><button class="btn" value="close">✕</button></div>
+    <div class="weights" id="weightsBody"></div>
+    <div class="dlg-foot"><button class="btn primary" value="close">סגירה</button></div>
+  </form>
+</dialog>
+
+<dialog id="lightbox"><form method="dialog"><button style="all:unset;cursor:zoom-out"><img id="lbImg" alt="צילום מסך של המודעה"></button></form></dialog>
+
+<script src="data/apartments.js"></script>
+<script>
+const CRITERIA = [
+  ["renovated", "משופצת"], ["location", "מיקום"], ["price", "שכר דירה"],
+  ["shelter", "ממ\"ד / מקלט"], ["size", "גודל"], ["furnished", "מרוהטת"],
+];
+const STATUSES = [
+  ["not_contacted", "לא נוצר קשר", "--s-not"],
+  ["waiting", "ממתין לתשובה", "--s-wait"],
+  ["answered", "ענו", "--s-ans"],
+  ["visit_scheduled", "נקבע ביקור", "--s-sched"],
+  ["visited", "ביקרנו", "--s-vis"],
+  ["irrelevant", "לא רלוונטי", "--s-irr"],
+];
+const PLATFORMS = [
+  ["whatsapp", "וואטסאפ"], ["phone", "טלפון"], ["facebook", "פייסבוק"],
+  ["yad2", "יד 2"], ["sms", "SMS"], ["other", "אחר"],
+];
+const SOURCES = [["yad2", "יד 2"], ["facebook", "פייסבוק"], ["other", "אחר"]];
+const label = (list, k) => (list.find(x => x[0] === k) || [k, k || "—"])[1];
+
+// Local storage holds only what was changed in the browser, so new apartments
+// added to data/apartments.js still show up alongside local edits.
+const LS_KEY = "apt-tracker-v1";
+function loadLocal() {
+  try { return JSON.parse(localStorage.getItem(LS_KEY)) || {}; } catch { return {}; }
+}
+function saveLocal() {
+  try { localStorage.setItem(LS_KEY, JSON.stringify(local)); } catch {}
+}
+let local = Object.assign({ edits: {}, added: [], deleted: [], weights: {} }, loadLocal());
+const filters = { status: null };
+
+function emptyRatings() { return Object.fromEntries(CRITERIA.map(([k]) => [k, null])); }
+function allApartments() {
+  const base = (window.APARTMENTS || []).filter(a => !local.deleted.includes(a.id));
+  const merged = base.concat(local.added).map(a => {
+    const e = local.edits[a.id] || {};
+    return { ...a, ...e, ratings: { ...emptyRatings(), ...(a.ratings || {}), ...(e.ratings || {}) } };
+  });
+  return merged;
+}
+function weight(k) { return local.weights[k] ?? 1; }
+function score(a) {
+  let sum = 0, w = 0;
+  for (const [k] of CRITERIA) {
+    const r = a.ratings[k];
+    if (r) { sum += r * weight(k); w += weight(k); }
+  }
+  return w ? sum / w : null;
+}
+function updateApt(id, patch) {
+  const added = local.added.find(a => a.id === id);
+  if (added) {
+    Object.assign(added, patch, patch.ratings ? { ratings: { ...added.ratings, ...patch.ratings } } : {});
+  } else {
+    const e = local.edits[id] || {};
+    local.edits[id] = { ...e, ...patch, ...(patch.ratings ? { ratings: { ...(e.ratings || {}), ...patch.ratings } } : {}) };
+  }
+  saveLocal(); render();
+}
+
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const fmtDate = d => d ? new Date(d + "T00:00").toLocaleDateString("he-IL", { day: "numeric", month: "numeric", year: "2-digit" }) : "—";
+const fmtPrice = p => p ? "₪" + Number(p).toLocaleString("he-IL") : "";
+function starsHtml(v, id, k) {
+  const editable = id != null;
+  let h = `<span class="stars${editable ? " edit" : ""}">`;
+  for (let i = 1; i <= 5; i++) h += `<span class="${i <= (v || 0) ? "" : "off"}"${editable ? ` data-star="${i}" data-id="${esc(id)}" data-k="${k}"` : ""}>★</span>`;
+  return h + "</span>";
+}
+function waLink(phone) {
+  let d = String(phone || "").replace(/\D/g, "");
+  if (d.startsWith("0")) d = "972" + d.slice(1);
+  return d ? `https://wa.me/${d}` : null;
+}
+
+function renderKpis(list) {
+  const counts = Object.fromEntries(STATUSES.map(([k]) => [k, 0]));
+  list.forEach(a => counts[a.status || "not_contacted"]++);
+  const upcoming = list.filter(a => a.visitDate && a.visitDate >= new Date().toISOString().slice(0, 10)).length;
+  let h = `<div class="kpi${filters.status === null ? " active" : ""}" data-status=""><div class="v">${list.length}</div><div class="l">סה״כ דירות</div></div>`;
+  for (const [k, l, c] of STATUSES) {
+    h += `<div class="kpi${filters.status === k ? " active" : ""}" data-status="${k}"><div class="v">${counts[k]}</div><div class="l"><span class="dot" style="background:var(${c})"></span>${l}</div></div>`;
+  }
+  h += `<div class="kpi" data-status="__visits"><div class="v">${upcoming}</div><div class="l">📅 ביקורים קרובים</div></div>`;
+  document.getElementById("kpis").innerHTML = h;
+}
+
+function render() {
+  const all = allApartments();
+  renderKpis(all);
+  const q = document.getElementById("q").value.trim().toLowerCase();
+  const hideIrr = document.getElementById("hideIrr").value === "hide";
+  const sort = document.getElementById("sort").value;
+  let list = all.filter(a => {
+    if (filters.status === "__visits") return a.visitDate && a.visitDate >= new Date().toISOString().slice(0, 10);
+    if (filters.status) return (a.status || "not_contacted") === filters.status;
+    return !(hideIrr && a.status === "irrelevant");
+  });
+  if (q) list = list.filter(a => [a.location, a.description, a.contactName, a.contactPhone, a.notes].join(" ").toLowerCase().includes(q));
+  const far = "9999-99-99";
+  const sorters = {
+    score: (a, b) => (score(b) ?? -1) - (score(a) ?? -1),
+    price: (a, b) => (a.price || Infinity) - (b.price || Infinity),
+    entry: (a, b) => (a.entryDate || far).localeCompare(b.entryDate || far),
+    visit: (a, b) => (a.visitDate || far).localeCompare(b.visitDate || far),
+    added: (a, b) => (b.addedAt || "").localeCompare(a.addedAt || ""),
+  };
+  list.sort(sorters[sort]);
+
+  const grid = document.getElementById("grid");
+  if (!all.length) {
+    grid.innerHTML = `<div class="empty" style="grid-column:1/-1"><b>עוד אין דירות במעקב</b>שלחו ל-Claude קישור או צילום מסך של מודעה מיד 2 / פייסבוק והפרטים יתווספו כאן אוטומטית,<br>או הוסיפו ידנית עם "+ דירה חדשה".</div>`;
+    return;
+  }
+  if (!list.length) { grid.innerHTML = `<div class="empty" style="grid-column:1/-1">אין דירות שמתאימות לסינון</div>`; return; }
+
+  grid.innerHTML = list.map(a => {
+    const s = score(a);
+    const st = STATUSES.find(x => x[0] === (a.status || "not_contacted"));
+    const wa = waLink(a.contactPhone);
+    return `<article class="card${a.status === "irrelevant" ? " irrelevant" : ""}">
+      <div class="thumb" ${a.screenshot ? `data-shot="${esc(a.screenshot)}"` : ""}>
+        ${a.screenshot ? `<img src="${esc(a.screenshot)}" alt="צילום מסך של המודעה" loading="lazy">` : "אין צילום מסך"}
+        ${s != null ? `<span class="score">${s.toFixed(1)} ★</span>` : ""}
+      </div>
+      <div class="body">
+        <div class="title">${esc(a.location || "ללא מיקום")}</div>
+        <div class="meta">
+          ${a.price ? `<span><b style="color:var(--text)">${fmtPrice(a.price)}</b></span>` : ""}
+          ${a.rooms ? `<span>${esc(a.rooms)} חד׳</span>` : ""}
+          ${a.size ? `<span>${esc(a.size)} מ״ר</span>` : ""}
+          ${a.floor ? `<span>קומה ${esc(a.floor)}</span>` : ""}
+        </div>
+        ${a.description ? `<div class="desc" title="${esc(a.description)}">${esc(a.description)}</div>` : ""}
+        <div class="row">
+          <span class="dot" style="background:var(${st[2]})"></span>
+          <select class="status-select" data-status-for="${esc(a.id)}">
+            ${STATUSES.map(([k, l]) => `<option value="${k}"${k === st[0] ? " selected" : ""}>${l}</option>`).join("")}
+          </select>
+          ${a.platform ? `<span class="pill">דרך ${esc(label(PLATFORMS, a.platform))}</span>` : ""}
+        </div>
+        <div class="row">👤 ${esc(a.contactName || "—")} ${a.contactPhone ? `· <a href="tel:${esc(a.contactPhone)}" style="color:var(--accent)">${esc(a.contactPhone)}</a>` : ""}</div>
+        <div class="row">📅 ביקור: <b>${fmtDate(a.visitDate)}</b> &nbsp; 🔑 כניסה: <b>${fmtDate(a.entryDate)}</b></div>
+        <div class="ratings">${CRITERIA.map(([k, l]) => `<div><span>${l}</span>${starsHtml(a.ratings[k], a.id, k)}</div>`).join("")}</div>
+        ${a.notes ? `<div class="meta">📝 ${esc(a.notes)}</div>` : ""}
+      </div>
+      <div class="foot">
+        ${a.link ? `<a href="${esc(a.link)}" target="_blank" rel="noopener">🔗 למודעה ב${esc(label(SOURCES, a.source || (a.link.includes("yad2") ? "yad2" : a.link.includes("facebook") ? "facebook" : "other")))}</a>` : ""}
+        ${wa ? `<a href="${wa}" target="_blank" rel="noopener">💬 וואטסאפ</a>` : ""}
+        <button data-edit="${esc(a.id)}">✏️ עריכה</button>
+      </div>
+    </article>`;
+  }).join("");
+}
+
+// ---- Edit dialog ----
+const FIELDS = [
+  ["location", "מיקום", "text", "full"], ["description", "תיאור כללי", "textarea", "full"],
+  ["price", "שכר דירה (₪)", "number"], ["rooms", "חדרים", "number"],
+  ["size", "גודל (מ״ר)", "number"], ["floor", "קומה", "text"],
+  ["link", "קישור למודעה", "url", "full"], ["source", "מקור המודעה", SOURCES],
+  ["screenshot", "צילום מסך (נתיב/קישור)", "text"],
+  ["contactName", "איש קשר", "text"], ["contactPhone", "טלפון", "tel"],
+  ["status", "סטטוס מענה", STATUSES], ["platform", "פלטפורמת יצירת קשר", PLATFORMS],
+  ["visitDate", "תאריך ביקור", "date"], ["entryDate", "תאריך כניסה", "date"],
+  ["notes", "הערות", "textarea", "full"],
+];
+let editingId = null, editRatings = {};
+function openEdit(id) {
+  const a = id ? allApartments().find(x => x.id === id) : { status: "not_contacted", ratings: emptyRatings() };
+  editingId = id;
+  editRatings = { ...a.ratings };
+  document.getElementById("editTitle").textContent = id ? "עריכת דירה" : "דירה חדשה";
+  document.getElementById("btnDelete").style.display = id ? "" : "none";
+  let h = FIELDS.map(([k, l, t, cls]) => {
+    const v = a[k] ?? "";
+    let input;
+    if (Array.isArray(t)) input = `<select name="${k}"><option value="">—</option>${t.map(([o, ol]) => `<option value="${o}"${o === v ? " selected" : ""}>${ol}</option>`).join("")}</select>`;
+    else if (t === "textarea") input = `<textarea name="${k}">${esc(v)}</textarea>`;
+    else input = `<input name="${k}" type="${t}" value="${esc(v)}"${t === "number" ? ' step="any"' : ""}>`;
+    return `<label class="${cls || ""}">${l}${input}</label>`;
+  }).join("");
+  h += `<div class="full" style="font-size:13px;color:var(--muted)">דירוג</div><div class="full ratings" id="editStars"></div>`;
+  document.getElementById("editBody").innerHTML = h;
+  renderEditStars();
+  document.getElementById("editDlg").showModal();
+}
+function renderEditStars() {
+  document.getElementById("editStars").innerHTML = CRITERIA.map(([k, l]) =>
+    `<div><span>${l}</span>${starsHtml(editRatings[k], "__edit", k)}</div>`).join("");
+}
+document.getElementById("editDlg").addEventListener("close", e => {
+  const dlg = e.target, action = dlg.returnValue;
+  if (action === "save") {
+    const fd = new FormData(document.getElementById("editForm"));
+    const patch = { ratings: { ...editRatings } };
+    for (const [k, , t] of FIELDS) {
+      let v = fd.get(k);
+      if (t === "number") v = v === "" ? null : Number(v);
+      else if (v === "") v = null;
+      patch[k] = v;
+    }
+    if (editingId) updateApt(editingId, patch);
+    else {
+      local.added.push({ id: "local-" + Date.now(), addedAt: new Date().toISOString().slice(0, 10), ...patch });
+      saveLocal(); render();
+    }
+  } else if (action === "delete" && editingId && confirm("למחוק את הדירה מהמעקב?")) {
+    local.added = local.added.filter(a => a.id !== editingId);
+    if (!local.deleted.includes(editingId)) local.deleted.push(editingId);
+    delete local.edits[editingId];
+    saveLocal(); render();
+  }
+  dlg.returnValue = "";
+});
+
+// ---- Weights ----
+function renderWeights() {
+  document.getElementById("weightsBody").innerHTML = CRITERIA.map(([k, l]) =>
+    `<label><span>${l}</span><input type="range" min="0" max="3" step="0.5" value="${weight(k)}" data-w="${k}"><b>${weight(k)}</b></label>`).join("");
+}
+document.getElementById("weightsBody").addEventListener("input", e => {
+  const k = e.target.dataset.w; if (!k) return;
+  local.weights[k] = Number(e.target.value);
+  e.target.nextElementSibling.textContent = e.target.value;
+  saveLocal(); render();
+});
+
+// ---- Events ----
+document.addEventListener("click", e => {
+  const t = e.target;
+  if (t.dataset.star) {
+    const v = Number(t.dataset.star), k = t.dataset.k;
+    if (t.dataset.id === "__edit") { editRatings[k] = editRatings[k] === v ? null : v; renderEditStars(); }
+    else {
+      const a = allApartments().find(x => x.id === t.dataset.id);
+      updateApt(t.dataset.id, { ratings: { [k]: a.ratings[k] === v ? null : v } });
+    }
+    return;
+  }
+  const edit = t.closest("[data-edit]"); if (edit) return openEdit(edit.dataset.edit);
+  const kpi = t.closest(".kpi");
+  if (kpi) { const s = kpi.dataset.status || null; filters.status = filters.status === s ? null : s; return render(); }
+  const shot = t.closest("[data-shot]");
+  if (shot) { document.getElementById("lbImg").src = shot.dataset.shot; document.getElementById("lightbox").showModal(); }
+});
+document.addEventListener("change", e => {
+  const id = e.target.dataset.statusFor;
+  if (id) updateApt(id, { status: e.target.value });
+});
+document.getElementById("q").addEventListener("input", render);
+document.getElementById("sort").addEventListener("change", render);
+document.getElementById("hideIrr").addEventListener("change", render);
+document.getElementById("btnAdd").addEventListener("click", () => openEdit(null));
+document.getElementById("btnWeights").addEventListener("click", () => { renderWeights(); document.getElementById("weightsDlg").showModal(); });
+document.getElementById("btnExport").addEventListener("click", () => {
+  const data = allApartments().map(a => ({ ...a, score: score(a) }));
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  Object.assign(document.createElement("a"), { href: url, download: "apartments-export.json" }).click();
+  URL.revokeObjectURL(url);
+});
+render();
+</script>
+</body>
+</html>
