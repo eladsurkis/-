@@ -189,6 +189,7 @@ const BROWSER = "host:claude_browser";
 const BROWSER_TOOLS = ["preview_start", "navigate", "get_page_text", "read_page", "find", "computer"];
 let browserTools = null; // sample tools wrapping the browser, built on first use
 const fetching = new Set();
+const fetchNote = {}; // per-card message for this visit
 let apts = [], weights = {};
 const filters = { status: null };
 
@@ -292,7 +293,7 @@ function render() {
         ${shot ? `<img src="${esc(shot)}" alt="" loading="lazy">` : "אין צילום מסך"}
         ${s != null ? `<span class="score">${s.toFixed(1)} <span>★</span></span>` : ""}
         ${a.example ? `<span class="example">דוגמה</span>` : ""}
-        ${a.fetchState === "pending" ? `<span class="fetch pending">${fetching.has(a.id) ? "Claude קורא את המודעה בדפדפן…" : "ממתין לשליפה"}</span>` : ""}
+        ${a.fetchState === "pending" ? `<span class="fetch pending">${fetching.has(a.id) ? "Claude קורא את המודעה בדפדפן…" : esc(fetchNote[a.id] || "ממתין לשליפה")}</span>` : ""}
         ${a.fetchState === "failed" ? `<span class="fetch failed">לא הצלחתי לקרוא את המודעה${a.fetchError ? ": " + esc(a.fetchError) : ""}</span>` : ""}
       </button>
       <div class="body">
@@ -426,18 +427,42 @@ function shrinkSchema(schema) {
   }
   return out.type === "object" ? out : { type: "object", ...out };
 }
+// Fallback schemas for the desktop app's browser tools: the app does not describe host tools,
+// so these stay permissive and Claude adjusts from the error text if an argument is wrong.
+const FALLBACK_SCHEMAS = {
+  preview_start: { type: "object", properties: { url: { type: "string" } }, additionalProperties: true },
+  navigate: { type: "object", properties: { url: { type: "string" }, tabId: { type: "number" } }, additionalProperties: true },
+  get_page_text: { type: "object", properties: { tabId: { type: "number" } }, additionalProperties: true },
+  read_page: { type: "object", properties: { tabId: { type: "number" } }, additionalProperties: true },
+  find: { type: "object", properties: { query: { type: "string" }, tabId: { type: "number" } }, additionalProperties: true },
+  computer: { type: "object", properties: { action: { type: "string", description: "e.g. screenshot" }, tabId: { type: "number" } }, additionalProperties: true },
+};
 async function getBrowserTools(state) {
   if (browserTools) return browserTools;
+  let listed = [];
+  try {
+    const lt = await mcp.listTools(BROWSER);
+    const srv = (lt.servers || []).find(x => x.server === BROWSER);
+    listed = srv ? srv.tools || [] : [];
+  } catch { listed = []; }
+  if (!listed.length) return null;
   const tools = [];
   for (const name of BROWSER_TOOLS) {
-    let d;
-    try { d = await mcp.describeTool(BROWSER, name); } catch { continue; }
+    const info = listed.find(t => t.name === name);
+    if (!info) continue;
+    let schema = FALLBACK_SCHEMAS[name];
+    try { const d = await mcp.describeTool(BROWSER, name); if (d && d.inputSchema) schema = shrinkSchema(d.inputSchema); } catch {}
     tools.push({
       name,
-      description: (d.description || name).slice(0, 1000),
-      inputSchema: shrinkSchema(d.inputSchema),
+      description: ((info.description || "") + " (Claude desktop app browser tool '" + name + "'. If a call fails, read the error text and retry with the arguments it asks for.)").slice(0, 1000),
+      inputSchema: schema,
       async execute(input) {
-        const res = await mcp.callTool(BROWSER, name, input, { cache: false });
+        let res;
+        try { res = await mcp.callTool(BROWSER, name, input || {}, { cache: false }); }
+        catch (err) {
+          const extra = err && err.result && err.result.content ? err.result.content.filter(b => b.type === "text").map(b => b.text).join(" ") : "";
+          throw new Error(((err && err.code) || "error") + ": " + ((err && err.message) || "") + " " + extra);
+        }
         const texts = [];
         for (const b of res.content || []) {
           if (b.type === "text") texts.push(b.text);
@@ -451,7 +476,7 @@ async function getBrowserTools(state) {
       },
     });
   }
-  if (!tools.some(t => t.name === "navigate") || !tools.some(t => t.name === "get_page_text" || t.name === "read_page")) return null;
+  if (!tools.some(t => t.name === "navigate" || t.name === "preview_start")) return null;
   browserTools = tools;
   return tools;
 }
@@ -464,6 +489,7 @@ async function browserAvailable() {
 async function fetchListing(id) {
   const a = apts.find(x => x.id === id);
   if (!a || fetching.has(id)) return;
+  delete fetchNote[id];
   fetching.add(id); render();
   browserState.shot = null;
   try {
@@ -510,8 +536,8 @@ async function fetchListing(id) {
       : code === "rate_limited" ? "יותר מדי בקשות. נסו שוב בעוד כמה דקות."
       : code === "cancelled" ? "השליפה בוטלה."
       : "השליפה לא הצליחה. נסו שוב.";
-    if (msg) updateApt(id, { fetchState: "failed", fetchError: msg });
-    else showBanner("כדי לשלוף מודעה מקישור, פתחו את הדף באפליקציית Claude למחשב (Cowork). שם Claude קורא את המודעה בדפדפן המובנה.");
+    if (msg) updateApt(id, { fetchState: "failed", fetchError: msg + (code ? " (" + code + ")" : "") });
+    else fetchNote[id] = "הדפדפן של Claude לא זמין כאן. פתחו את הדף באפליקציית Claude למחשב, במצב Cowork";
   } finally {
     fetching.delete(id); render();
   }
