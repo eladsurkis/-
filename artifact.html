@@ -96,6 +96,7 @@ button, select, input, textarea { font: inherit; color: inherit; }
 .remind { display: flex; gap: 6px; flex-wrap: wrap; flex-basis: 100%; }
 .remind a, .remind button { font-size: 12px; color: var(--accent); background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 3px 8px; text-decoration: none; cursor: pointer; }
 .cal { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 14px; display: flex; flex-direction: column; gap: 12px; }
+.cal[hidden] { display: none; }
 .cal-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .cal-head h2 { font-family: var(--display); font-size: 18px; margin: 0; flex: 1; }
 .cal-head select { background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px; padding: 5px 8px; font-size: 13px; }
@@ -110,6 +111,22 @@ button, select, input, textarea { font: inherit; color: inherit; }
 .cal-item { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; border-top: 1px solid var(--border); padding-top: 8px; font-size: 14px; }
 .cal-item b { font-variant-numeric: tabular-nums; min-width: 9ch; }
 @media (max-width: 560px) { .cal-day { min-height: 54px; } .cal-ev { font-size: 10px; } }
+.view-toggle { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+.view-toggle button { all: unset; cursor: pointer; padding: 7px 12px; font-size: 14px; background: var(--surface); }
+.view-toggle button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
+.view-toggle button:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.table-wrap { grid-column: 1 / -1; overflow-x: auto; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; }
+.apt-table { width: 100%; border-collapse: collapse; font-size: 14px; min-width: 980px; }
+.apt-table th { text-align: right; font-weight: 500; font-size: 12px; color: var(--muted); padding: 10px; border-bottom: 1px solid var(--border); white-space: nowrap; background: var(--surface-2); position: sticky; top: 0; }
+.apt-table td { padding: 8px 10px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+.apt-table tr:last-child td { border-bottom: 0; }
+.apt-table tr.irrelevant td { opacity: .55; }
+.apt-table .num { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.apt-table .loc { all: unset; cursor: pointer; font-weight: 500; color: var(--text); }
+.apt-table .loc:hover, .apt-table .loc:focus-visible { color: var(--accent); text-decoration: underline; }
+.apt-table .sub { font-size: 12px; color: var(--muted); }
+.apt-table a { color: var(--accent); text-decoration: none; }
+.rate-add { all: unset; cursor: pointer; font-size: 13px; color: var(--accent); }
 .banner { background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; font-size: 13px; color: var(--muted); }
 dialog { border: none; border-radius: 14px; padding: 0; background: var(--surface); color: var(--text); width: min(680px, calc(100vw - 32px)); max-height: calc(100vh - 32px); direction: rtl; }
 dialog::backdrop { background: rgba(0,0,0,.5); }
@@ -173,6 +190,10 @@ dialog::backdrop { background: rgba(0,0,0,.5); }
       <option value="visit">מיון: תאריך ביקור</option>
       <option value="added">מיון: נוספו לאחרונה</option>
     </select>
+    <span class="view-toggle" role="group" aria-label="אופן תצוגה">
+      <button type="button" id="viewCards" data-view="cards">כרטיסים</button>
+      <button type="button" id="viewTable" data-view="table">טבלה</button>
+    </span>
     <select id="hideIrr" aria-label="דירות לא רלוונטיות">
       <option value="hide">הסתר לא רלוונטיות</option>
       <option value="show">הצג הכל</option>
@@ -298,6 +319,43 @@ function renderKpis() {
   $("kpis").innerHTML = h;
 }
 
+// Cards or one table row per apartment; remembered per viewer.
+const LS_VIEW = "apt-view";
+let view = (() => { try { return localStorage.getItem(LS_VIEW) === "table" ? "table" : "cards"; } catch { return "cards"; } })();
+const rateOpen = new Set(); // cards where the viewer opened rating for an unrated apartment
+const isRated = a => CRITERIA.some(([k]) => a.ratings && a.ratings[k]);
+function tableHtml(list) {
+  const rows = list.map(a => {
+    const st = STATUSES.find(x => x[0] === a.status) || STATUSES[0];
+    const s = score(a);
+    return `<tr class="${a.status === "irrelevant" ? "irrelevant" : ""}">
+      <td><button type="button" class="loc" ${canWrite ? `data-edit="${esc(a.id)}"` : ""}>${esc(a.location || (a.link ? "מודעה ב" + label(SOURCES, sourceOf(a)) : "ללא מיקום"))}</button>
+        ${a.fetchState === "pending" ? `<div class="sub">ממתין לשליפה</div>` : a.fetchState === "failed" ? `<div class="sub" style="color:var(--danger)">לא נקראה</div>` : ""}</td>
+      <td class="num">${a.price ? "₪" + Number(a.price).toLocaleString("he-IL") : "—"}</td>
+      <td class="num">${a.rooms || "—"}</td>
+      <td class="num">${a.size || "—"}</td>
+      <td><span style="display:inline-flex;gap:6px;align-items:center"><span class="dot" style="background:var(${st[2]})"></span>
+        <select class="status-select" data-status-for="${esc(a.id)}" aria-label="סטטוס מענה"${canWrite ? "" : " disabled"}>
+          ${STATUSES.map(([k, l]) => `<option value="${k}"${k === st[0] ? " selected" : ""}>${l}</option>`).join("")}</select></span></td>
+      <td>${a.platform ? esc(label(PLATFORMS, a.platform)) : "—"}</td>
+      <td>${esc(a.contactName || "—")}${a.contactPhone ? `<div class="sub phone">${esc(a.contactPhone)}</div>` : ""}</td>
+      <td class="num">${fmtDate(a.visitDate)}${a.visitDate && a.visitTime ? `<div class="sub">${esc(a.visitTime)}</div>` : ""}</td>
+      <td class="num">${fmtDate(a.entryDate)}</td>
+      <td class="num">${s != null ? s.toFixed(1) + ' <span style="color:var(--star)">★</span>' : "—"}</td>
+      <td>${a.notes ? `<span class="sub" title="${esc(a.notes)}">${esc(a.notes.length > 40 ? a.notes.slice(0, 40) + "…" : a.notes)}</span>` : ""}</td>
+      <td>${a.link ? `<a href="${esc(a.link)}" target="_blank" rel="noopener">מודעה</a>` : ""}</td>
+    </tr>`;
+  }).join("");
+  return `<div class="table-wrap"><table class="apt-table"><thead><tr>
+    <th>מיקום</th><th>שכר דירה</th><th>חדרים</th><th>מ״ר</th><th>סטטוס</th><th>פלטפורמה</th><th>איש קשר</th><th>ביקור</th><th>כניסה</th><th>ציון</th><th>הערות</th><th>קישור</th>
+  </tr></thead><tbody>${rows}</tbody></table></div>`;
+}
+function setView(v) {
+  view = v;
+  try { localStorage.setItem(LS_VIEW, v); } catch {}
+  render();
+}
+
 let renderPending = false;
 function render() {
   // Don't rebuild the cards while someone is typing in one of them.
@@ -305,6 +363,8 @@ function render() {
   if (ae && $("grid").contains(ae) && (ae.tagName === "TEXTAREA" || ae.tagName === "INPUT")) { renderPending = true; renderCalendar(); return; }
   renderPending = false;
   renderCalendar();
+  $("viewCards").setAttribute("aria-pressed", String(view === "cards"));
+  $("viewTable").setAttribute("aria-pressed", String(view === "table"));
   renderKpis();
   $("btnAdd").disabled = !canWrite;
   const grid = $("grid");
@@ -332,6 +392,7 @@ function render() {
   list.sort(sorters[$("sort").value]);
   if (!list.length) { grid.innerHTML = `<div class="empty">אין דירות שמתאימות לסינון הזה.</div>`; return; }
 
+  if (view === "table") { grid.innerHTML = tableHtml(list); return; }
   grid.innerHTML = list.map(a => {
     const s = score(a);
     const st = STATUSES.find(x => x[0] === a.status) || STATUSES[0];
@@ -372,7 +433,9 @@ function render() {
           <div><span class="lbl">ביקור בדירה</span><b>${fmtDate(a.visitDate)}${a.visitDate && a.visitTime ? " · " + esc(a.visitTime) : ""}</b></div>
           <div><span class="lbl">תאריך כניסה</span><b>${fmtDate(a.entryDate)}</b></div>
         </div>
-        <div class="ratings">${CRITERIA.map(([k, l]) => `<div><span>${l}</span>${starsHtml(a.ratings && a.ratings[k], a.id, k, canWrite)}</div>`).join("")}</div>
+        ${isRated(a) || rateOpen.has(a.id)
+          ? `<div class="ratings">${CRITERIA.map(([k, l]) => `<div><span>${l}</span>${starsHtml(a.ratings && a.ratings[k], a.id, k, canWrite)}</div>`).join("")}</div>`
+          : canWrite ? `<button type="button" class="rate-add" data-rate-open="${esc(a.id)}">+ דירוג הדירה</button>` : ""}
         ${canWrite ? `<textarea class="note-input" id="note-${esc(a.id)}" data-note="${esc(a.id)}" placeholder="הערות שלך על הדירה…" aria-label="הערות">${esc(a.notes || "")}</textarea>`
           : a.notes ? `<div class="notes">${esc(a.notes)}</div>` : ""}
       </div>
@@ -792,6 +855,8 @@ document.addEventListener("click", e => {
     }
     return;
   }
+  const vbtn = t.closest("[data-view]"); if (vbtn) return setView(vbtn.dataset.view);
+  const ro = t.closest("[data-rate-open]"); if (ro) { rateOpen.add(ro.dataset.rateOpen); return render(); }
   const ics = t.closest("[data-ics]"); if (ics) return saveIcs(ics.dataset.ics, ics);
   const calEv = t.closest("[data-cal]"); if (calEv) return canWrite ? openEdit(calEv.dataset.cal) : null;
   const chip = t.closest("[data-platform]");
