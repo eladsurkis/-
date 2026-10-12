@@ -126,6 +126,12 @@ button, select, input, textarea { font: inherit; color: inherit; }
 .apt-table .loc:hover, .apt-table .loc:focus-visible { color: var(--accent); text-decoration: underline; }
 .apt-table .sub { font-size: 12px; color: var(--muted); }
 .apt-table a { color: var(--accent); text-decoration: none; }
+.apt-table th button { all: unset; cursor: pointer; display: inline-flex; gap: 4px; align-items: center; }
+.apt-table th button:hover, .apt-table th button:focus-visible { color: var(--text); }
+.apt-table th[aria-sort="ascending"], .apt-table th[aria-sort="descending"] { color: var(--accent); }
+.tthumb { all: unset; cursor: zoom-in; display: block; width: 56px; height: 42px; border-radius: 6px; overflow: hidden; border: 1px solid var(--border); background: var(--surface-2); }
+.tthumb img { width: 100%; height: 100%; object-fit: cover; object-position: top; display: block; }
+.tthumb:focus-visible { outline: 2px solid var(--accent); }
 .rate-add { all: unset; cursor: pointer; font-size: 13px; color: var(--accent); }
 .banner { background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; font-size: 13px; color: var(--muted); }
 dialog { border: none; border-radius: 14px; padding: 0; background: var(--surface); color: var(--text); width: min(680px, calc(100vw - 32px)); max-height: calc(100vh - 32px); direction: rtl; }
@@ -189,7 +195,12 @@ dialog::backdrop { background: rgba(0,0,0,.5); }
       <option value="entry">מיון: תאריך כניסה</option>
       <option value="visit">מיון: תאריך ביקור</option>
       <option value="added">מיון: נוספו לאחרונה</option>
+      <option value="status">מיון: סטטוס</option>
+      <option value="rooms">מיון: חדרים</option>
+      <option value="size">מיון: גודל</option>
+      <option value="location">מיון: מיקום (א-ת)</option>
     </select>
+    <select id="statusFilter" aria-label="סינון לפי סטטוס"><option value="">כל הסטטוסים</option></select>
     <span class="view-toggle" role="group" aria-label="אופן תצוגה">
       <button type="button" id="viewCards" data-view="cards">כרטיסים</button>
       <button type="button" id="viewTable" data-view="table">טבלה</button>
@@ -324,11 +335,17 @@ const LS_VIEW = "apt-view";
 let view = (() => { try { return localStorage.getItem(LS_VIEW) === "table" ? "table" : "cards"; } catch { return "cards"; } })();
 const rateOpen = new Set(); // cards where the viewer opened rating for an unrated apartment
 const isRated = a => CRITERIA.some(([k]) => a.ratings && a.ratings[k]);
+function th(key, text) {
+  const active = $("sort").value === key;
+  return `<th${active ? ` aria-sort="${sortDir === "asc" ? "ascending" : "descending"}"` : ""}><button type="button" data-sort="${key}" aria-label="מיון לפי ${text}">${text}${active ? (sortDir === "asc" ? " ▲" : " ▼") : ""}</button></th>`;
+}
 function tableHtml(list) {
   const rows = list.map(a => {
     const st = STATUSES.find(x => x[0] === a.status) || STATUSES[0];
     const s = score(a);
+    const shot = shotUrl(a);
     return `<tr class="${a.status === "irrelevant" ? "irrelevant" : ""}">
+      <td>${shot ? `<button type="button" class="tthumb" data-shot="${esc(shot)}" aria-label="הגדלת צילום המסך"><img src="${esc(shot)}" alt="" loading="lazy"></button>` : ""}</td>
       <td><button type="button" class="loc" ${canWrite ? `data-edit="${esc(a.id)}"` : ""}>${esc(a.location || (a.link ? "מודעה ב" + label(SOURCES, sourceOf(a)) : "ללא מיקום"))}</button>
         ${a.fetchState === "pending" ? `<div class="sub">ממתין לשליפה</div>` : a.fetchState === "failed" ? `<div class="sub" style="color:var(--danger)">לא נקראה</div>` : ""}</td>
       <td class="num">${a.price ? "₪" + Number(a.price).toLocaleString("he-IL") : "—"}</td>
@@ -347,12 +364,33 @@ function tableHtml(list) {
     </tr>`;
   }).join("");
   return `<div class="table-wrap"><table class="apt-table"><thead><tr>
-    <th>מיקום</th><th>שכר דירה</th><th>חדרים</th><th>מ״ר</th><th>סטטוס</th><th>פלטפורמה</th><th>איש קשר</th><th>ביקור</th><th>כניסה</th><th>ציון</th><th>הערות</th><th>קישור</th>
+    <th>תמונה</th>${th("location", "מיקום")}${th("price", "שכר דירה")}${th("rooms", "חדרים")}${th("size", "מ״ר")}${th("status", "סטטוס")}<th>פלטפורמה</th><th>איש קשר</th>${th("visit", "ביקור")}${th("entry", "כניסה")}${th("score", "ציון")}<th>הערות</th><th>קישור</th>
   </tr></thead><tbody>${rows}</tbody></table></div>`;
 }
 function setView(v) {
   view = v;
   try { localStorage.setItem(LS_VIEW, v); } catch {}
+  render();
+}
+
+// Sort keys shared by the sort menu and the table headers; empty values always sort last.
+const SORT_KEYS = {
+  score: a => score(a),
+  price: a => a.price || null,
+  rooms: a => a.rooms || null,
+  size: a => a.size || null,
+  status: a => Math.max(0, STATUSES.findIndex(x => x[0] === a.status)),
+  entry: a => a.entryDate || null,
+  visit: a => a.visitDate ? a.visitDate + (a.visitTime || "") : null,
+  added: a => a.addedAt || null,
+  location: a => a.location || null,
+};
+const DEFAULT_DESC = ["score", "added"];
+let sortDir = "desc"; // default sort is by score, highest first
+function setSort(key, fromHeader) {
+  if (fromHeader && $("sort").value === key) sortDir = sortDir === "asc" ? "desc" : "asc";
+  else sortDir = DEFAULT_DESC.includes(key) ? "desc" : "asc";
+  $("sort").value = key;
   render();
 }
 
@@ -363,6 +401,7 @@ function render() {
   if (ae && $("grid").contains(ae) && (ae.tagName === "TEXTAREA" || ae.tagName === "INPUT")) { renderPending = true; renderCalendar(); return; }
   renderPending = false;
   renderCalendar();
+  $("statusFilter").value = filters.status && filters.status !== "__visits" ? filters.status : "";
   $("viewCards").setAttribute("aria-pressed", String(view === "cards"));
   $("viewTable").setAttribute("aria-pressed", String(view === "table"));
   renderKpis();
@@ -382,14 +421,13 @@ function render() {
   });
   if (q) list = list.filter(a => [a.location, a.description, a.contactName, a.contactPhone, a.notes].join(" ").toLowerCase().includes(q));
   const far = "9999-99-99";
-  const sorters = {
-    score: (a, b) => (score(b) ?? -1) - (score(a) ?? -1),
-    price: (a, b) => (a.price || Infinity) - (b.price || Infinity),
-    entry: (a, b) => (a.entryDate || far).localeCompare(b.entryDate || far),
-    visit: (a, b) => ((a.visitDate || far) + (a.visitTime || "")).localeCompare((b.visitDate || far) + (b.visitTime || "")),
-    added: (a, b) => (b.addedAt || "").localeCompare(a.addedAt || ""),
-  };
-  list.sort(sorters[$("sort").value]);
+  const key = $("sort").value, get = SORT_KEYS[key] || SORT_KEYS.score, dir = sortDir === "desc" ? -1 : 1;
+  list.sort((a, b) => {
+    const x = get(a), y = get(b);
+    if (x == null || x === "") return y == null || y === "" ? 0 : 1; // empty values stay last either way
+    if (y == null || y === "") return -1;
+    return dir * (typeof x === "number" ? x - y : String(x).localeCompare(String(y), "he"));
+  });
   if (!list.length) { grid.innerHTML = `<div class="empty">אין דירות שמתאימות לסינון הזה.</div>`; return; }
 
   if (view === "table") { grid.innerHTML = tableHtml(list); return; }
@@ -855,6 +893,7 @@ document.addEventListener("click", e => {
     }
     return;
   }
+  const sb = t.closest("[data-sort]"); if (sb) return setSort(sb.dataset.sort, true);
   const vbtn = t.closest("[data-view]"); if (vbtn) return setView(vbtn.dataset.view);
   const ro = t.closest("[data-rate-open]"); if (ro) { rateOpen.add(ro.dataset.rateOpen); return render(); }
   const ics = t.closest("[data-ics]"); if (ics) return saveIcs(ics.dataset.ics, ics);
@@ -898,7 +937,9 @@ document.addEventListener("change", e => {
 });
 $("grid").addEventListener("focusout", () => setTimeout(() => { if (renderPending) render(); }, 0));
 $("q").addEventListener("input", render);
-$("sort").addEventListener("change", render);
+$("sort").addEventListener("change", e => setSort(e.target.value, false));
+$("statusFilter").innerHTML += STATUSES.map(([k, l]) => `<option value="${k}">${l}</option>`).join("");
+$("statusFilter").addEventListener("change", e => { filters.status = e.target.value || null; render(); });
 $("hideIrr").addEventListener("change", render);
 $("btnAdd").addEventListener("click", () => openEdit(null));
 $("btnWeights").addEventListener("click", () => { renderWeights(); $("weightsDlg").showModal(); });
