@@ -140,6 +140,8 @@ button, select, input, textarea { font: inherit; color: inherit; }
 .tthumb { all: unset; cursor: zoom-in; display: block; width: 56px; height: 42px; border-radius: 6px; overflow: hidden; border: 1px solid var(--border); background: var(--surface-2); }
 .tthumb img { width: 100%; height: 100%; object-fit: cover; object-position: top; display: block; }
 .tthumb:focus-visible { outline: 2px solid var(--accent); }
+.row-edit { font-size: 13px; color: var(--accent); background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 4px 10px; cursor: pointer; white-space: nowrap; }
+.row-edit:hover { background: var(--surface-2); }
 .rate-add { all: unset; cursor: pointer; font-size: 13px; color: var(--accent); }
 .banner { background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; font-size: 13px; color: var(--muted); }
 dialog { border: none; border-radius: 14px; padding: 0; background: var(--surface); color: var(--text); width: min(680px, calc(100vw - 32px)); max-height: calc(100vh - 32px); direction: rtl; }
@@ -378,10 +380,11 @@ function tableHtml(list) {
       <td class="num">${s != null ? s.toFixed(1) + ' <span style="color:var(--star)">★</span>' : "—"}</td>
       <td>${a.notes ? `<span class="sub" title="${esc(a.notes)}">${esc(a.notes.length > 40 ? a.notes.slice(0, 40) + "…" : a.notes)}</span>` : ""}</td>
       <td>${a.link ? `<a href="${esc(a.link)}" target="_blank" rel="noopener">מודעה</a>` : ""}</td>
+      ${canWrite ? `<td><button type="button" class="row-edit" data-edit="${esc(a.id)}" aria-label="עריכת ${esc(a.location || "הדירה")}">עריכה</button></td>` : ""}
     </tr>`;
   }).join("");
   return `<div class="table-wrap"><table class="apt-table"><thead><tr>
-    <th>תמונה</th>${th("location", "מיקום")}${th("price", "שכר דירה")}${th("rooms", "חדרים")}${th("size", "מ״ר")}${th("status", "סטטוס")}<th>פלטפורמה</th><th>איש קשר</th>${th("visit", "ביקור")}${th("entry", "כניסה")}${th("score", "ציון")}<th>הערות</th><th>קישור</th>
+    <th>תמונה</th>${th("location", "מיקום")}${th("price", "שכר דירה")}${th("rooms", "חדרים")}${th("size", "מ״ר")}${th("status", "סטטוס")}<th>פלטפורמה</th><th>איש קשר</th>${th("visit", "ביקור")}${th("entry", "כניסה")}${th("score", "ציון")}<th>הערות</th><th>קישור</th>${canWrite ? "<th></th>" : ""}
   </tr></thead><tbody>${rows}</tbody></table></div>`;
 }
 function setView(v) {
